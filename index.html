@@ -205,19 +205,20 @@ function registerForm() {
       <label for="pos">ตำแหน่ง</label>
       <select id="pos" required>
         <option value="">เลือกตำแหน่ง</option>
-        <option>ทันตแพทย์</option><option>เคาน์เตอร์</option><option>ผู้ช่วยทันตแพทย์</option><option>ช่างแล็บ</option><option>ดีไซเนอร์</option>
-        <option>ถ่ายภาพ</option><option>แม่บ้าน</option><option>อื่นๆ</option>
+        <option>ทันตแพทย์</option><option>ผู้จัดการ</option><option>ผู้ช่วยทันตแพทย์</option><option>เคาน์เตอร์</option><option>ช่างแล็บ</option><option>อื่นๆ</option>
       </select>
+      <input id="posOther" hidden placeholder="ระบุตำแหน่ง เช่น แม่บ้าน" style="margin-top:6px">
       <div style="margin-top:14px"><button class="btn" style="width:100%" type="submit">ส่งลงทะเบียน</button></div>
     </form>
   </div>`;
+  document.getElementById('pos').onchange = e => { const o = document.getElementById('posOther'); o.hidden = e.target.value !== 'อื่นๆ'; o.required = !o.hidden; };
   document.getElementById('reg').onsubmit = async ev => {
     ev.preventDefault();
     const b = ev.target.querySelector('button'); b.disabled = true; b.textContent = 'กำลังส่ง…';
     const r = await api('register', {
       nickname: document.getElementById('nick').value.trim(),
       fullname: document.getElementById('full').value.trim(),
-      position: document.getElementById('pos').value
+      position: document.getElementById('pos').value === 'อื่นๆ' ? 'อื่นๆ: ' + document.getElementById('posOther').value.trim() : document.getElementById('pos').value
     }).catch(e => ({ok:false, error:e.message}));
     if (r.ok) waiting(); else { b.disabled = false; b.textContent = 'ส่งลงทะเบียน'; alertBox('ส่งไม่สำเร็จ: ' + r.error); }
   };
@@ -271,7 +272,8 @@ const errText = r => ({
   already_out: 'ลงเวลาออกงานวันนี้ไปแล้ว',
   no_location: 'ไม่ได้รับตำแหน่ง ลองใหม่อีกครั้ง',
   missing_fields: 'กรอกวันที่และสาเหตุให้ครบ',
-  not_day_off: 'วันที่เลือกไม่ใช่วันหยุดของคลินิก'
+  not_day_off: 'วันที่เลือกไม่ใช่วันหยุดของคลินิก',
+  no_clock_needed: 'ตำแหน่งนี้ไม่ต้องลงเวลา (ลงเวลาเฉพาะผู้ช่วยทันตแพทย์)'
 }[r.error] || ('ทำรายการไม่สำเร็จ: ' + r.error));
 
 async function viewTeam() {
@@ -284,7 +286,9 @@ async function viewTeam() {
   const today = new Date().toLocaleDateString('en-CA', {timeZone:'Asia/Bangkok'});
 
   let clock;
-  if (!rec) clock = `<button class="btn" id="cin" style="width:100%;min-height:56px;font-size:16px">ลงเวลาเข้างาน</button>`;
+  const mustClock = String(me.position || '').trim() === 'ผู้ช่วยทันตแพทย์';
+  if (!mustClock) clock = `<div class="s">ตำแหน่ง${esc(me.position ? ' ' + me.position : 'นี้')} ไม่ต้องลงเวลาเข้า-ออกงาน (ลงเวลาเฉพาะผู้ช่วยทันตแพทย์) · ขอโอที/ขอลาได้ด้านล่าง</div>`;
+  else if (!rec) clock = `<button class="btn" id="cin" style="width:100%;min-height:56px;font-size:16px">ลงเวลาเข้างาน</button>`;
   else if (!rec.out) clock = `<div class="row"><div class="grow"><div class="t">เข้างาน ${esc(rec.in)}</div><div class="s ${Number(rec.late) ? 'warn' : ''}">${Number(rec.late) ? 'สาย ' + esc(rec.late) + ' นาที · ' + esc(rec.reason) : 'ตรงเวลา'}</div></div></div>
       <button class="btn" id="cout" style="width:100%;min-height:56px;font-size:16px">ลงเวลาออกงาน</button>`;
   else clock = `<div class="row"><div class="grow"><div class="t">เข้า ${esc(rec.in)} · ออก ${esc(rec.out)}</div><div class="s">ลงเวลาวันนี้ครบแล้ว</div></div><span class="pill">ครบ</span></div>`;
@@ -407,10 +411,11 @@ async function viewTeam() {
     box.innerHTML = r.people.length ? r.people.map(p => `
       <div style="border-top:1px solid var(--line);padding-top:10px;margin-top:10px">
         <div class="t">${esc(p.nickname)} · รวมจ่ายเพิ่ม ${baht(p.total)} บาท</div>
-        <div class="s">ลงเวลา ${p.daysWorked} วัน · สาย ${p.lateCount} ครั้ง → เบี้ยขยัน ${baht(p.allowance)}</div>
+        ${p.clock ? `<div class="s">ลงเวลา ${p.daysWorked} วัน · สาย ${p.lateCount} ครั้ง${p.absentDays ? ` · <b class="bad">ขาดงานไม่แจ้ง ${p.absentDays} วัน</b>` : ''} → เบี้ยขยัน ${baht(p.allowance)}</div>
+        ${p.absentDays ? `<div class="s bad">ขาด: ${p.absentDates.map(d => fmtDate(d)).join(', ')} (ขาดไม่แจ้ง = ไม่ได้เบี้ยขยัน)</div>` : ''}` : `<div class="s">${esc(p.position || '')} · ไม่ลงเวลา ไม่มีเบี้ยขยัน</div>`}
         <div class="s">โอที ${p.otHours} ชม. × ${r.rates.ot} = ${baht(p.otPay)} · วันหยุด ${p.holidayDays} วัน × ${r.rates.holiday} = ${baht(p.holidayPay)}</div>
         ${p.leaves.length ? `<div class="s">ลา: ${esc(p.leaves.join(', '))}</div>` : ''}
-      </div>`).join('') + '<p class="note" style="margin-top:10px">นับเฉพาะคำขอที่อนุมัติแล้ว เบี้ยขยันยังไม่หักกรณีขาดงานโดยไม่แจ้ง ให้หมอตรวจเองก่อนจ่าย</p>'
+      </div>`).join('') + '<p class="note" style="margin-top:10px">วันทำงาน = ทุกวันยกเว้นวันพุธและวันหยุดคลินิก นับถึงเมื่อวาน ตั้งแต่วันที่ลงทะเบียน · ไม่ลงเวลาและไม่มีใบลาที่อนุมัติ = ขาดงาน · นับเฉพาะคำขอที่อนุมัติแล้ว</p>'
       : '<p class="s">ยังไม่มีพนักงานที่อนุมัติแล้ว</p>';
   };
 
@@ -438,7 +443,7 @@ async function viewStock() {
   const host = document.createElement('div'); host.id = 'depHost'; app.appendChild(host); depSection(host);
 }
 
-let stockCat = 'ทั้งหมด', stockReserved = {}, stockPath = [], stockGroups = [], stockUnits = [], stockEdit = '';
+let stockCat = 'ทั้งหมด', stockReserved = {}, stockPath = [], stockGroups = [], stockUnits = [], stockEdit = '', stockSel = null, stockCond = '';
 const SEP = ' › ';
 // สต็อกเป็นชั้น v18: เส้นทางยืดหยุ่น (งาน › วัสดุ/อุปกรณ์ › หมวด › ยี่ห้อ › …) · กด + เพิ่มได้ทุกชั้น
 const JOB_ORDER = ['งานศัลยกรรม', 'งานอุดฟัน / ความงาม', 'งานครอบ / สะพาน / วีเนียร์', 'งานรักษาราก', 'งานจัดฟัน', 'งานฟันปลอมถอดได้', 'แล็บ', 'ใช้ร่วมทุกงาน', 'ของขาย', 'ยังไม่จัดหมวด'];
@@ -469,13 +474,20 @@ function renderStock(q) {
         <label>อยู่กลุ่ม (ย้ายได้)</label><select name="path">${allGroupPaths().map(p => `<option${p === i.path ? ' selected' : ''}>${esc(p)}</option>`).join('')}</select>
         <label>ผู้ขาย</label><input name="vendor" value="${esc(i['ผู้ขาย'] || '')}">
         <div style="display:flex;gap:8px;margin-top:8px"><button class="btn small" type="submit" style="flex:1">บันทึก</button><button class="btn ghost small" type="button" data-cancel>ยกเลิก</button></div></form>` : '';
-    return `<div class="row" style="flex-wrap:wrap"><div class="grow"><div class="t">${esc(i['ชื่อสินค้า'])}</div>${q ? `<div class="s" style="font-size:12px">${esc(i.path)}</div>` : ''}${sub}
+    const equip = String(i.path || '').split(SEP)[1] === 'อุปกรณ์', cond = i['สภาพ'] || '';
+    const condForm = stockCond === i['รหัสสินค้า'] ? `<div class="card" style="width:100%;margin:6px 0 0;padding:8px"><div class="s">สภาพของ ${esc(i['ชื่อสินค้า'])}</div>
+      <input class="cdNote" placeholder="เสียตรงไหน / ส่งซ่อมที่ไหน (ถ้ามี)" style="margin:6px 0">
+      <div class="cats">${['ชำรุด', 'รอส่งซ่อม', 'ส่งซ่อมแล้ว', 'ใช้ได้'].map(x => `<button type="button" data-cdset="${esc(x)}" aria-pressed="${x === (cond || 'ใช้ได้')}">${x === 'ใช้ได้' ? '✓ ใช้ได้แล้ว' : esc(x)}</button>`).join('')}</div></div>` : '';
+    if (stockSel) return `<label class="row" style="cursor:pointer;gap:10px"><input type="checkbox" data-sel="${code}" ${stockSel.has(i['รหัสสินค้า']) ? 'checked' : ''} style="width:22px;height:22px;flex:none">
+      <div class="grow"><div class="t">${esc(i['ชื่อสินค้า'])}</div>${sub}</div></label>`;
+    return `<div class="row" style="flex-wrap:wrap${cond ? ';border-left:4px solid var(--bad)' : ''}"><div class="grow"><div class="t">${esc(i['ชื่อสินค้า'])}${cond ? ` <span class="pill" style="background:var(--badbg);color:var(--bad)">🔧 ${esc(cond)}</span>` : ''}</div>${q ? `<div class="s" style="font-size:12px">${esc(i.path)}</div>` : ''}${sub}
+      ${cond && i['หมายเหตุสภาพ'] ? `<div class="s bad" style="font-size:12px">${esc(i['หมายเหตุสภาพ'])}</div>` : ''}
       <div class="s" style="font-size:11px">${fmtUp(i.updated)}</div></div>
-      <div style="display:flex;gap:6px;flex-wrap:wrap;width:100%;justify-content:flex-end"><button class="btn ghost small" data-iedit="${code}" aria-label="แก้">✎</button>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;width:100%;justify-content:flex-end">${equip || cond ? `<button class="btn ghost small" data-cond="${code}" style="${cond ? 'color:var(--bad)' : ''}">${cond ? 'สภาพ' : 'แจ้งเสีย'}</button>` : ''}<button class="btn ghost small" data-iedit="${code}" aria-label="แก้">✎</button>
       <button class="btn ghost small" data-count="${code}">นับ</button>
       <button class="btn ghost small" data-tobuy="${code}" aria-label="ใส่รายการต้องซื้อ">+ซื้อ</button>
       <button class="btn ghost small" data-code="${code}" data-type="เบิก">เบิก</button>
-      <button class="btn small" data-code="${code}" data-type="รับเข้า">รับเข้า</button></div>${edit}</div>`;
+      <button class="btn small" data-code="${code}" data-type="รับเข้า">รับเข้า</button></div>${condForm}${edit}</div>`;
   };
   const under = p => stockItems.filter(i => i.path === p || i.path.startsWith(p + SEP));
   const tile = (name) => {
@@ -501,18 +513,43 @@ function renderStock(q) {
     const here = stockItems.filter(i => i.path === cur);
     crumbs = `<div class="cats" style="margin:8px 0;align-items:center;flex-wrap:wrap;overflow:visible"><button type="button" data-up="0" aria-pressed="${!P.length}">ทุกงาน</button>${P.map((x, k) => `<button type="button" data-up="${k + 1}" aria-pressed="${k === P.length - 1}">${esc(x)}</button>`).join('')}<button type="button" id="plus" aria-label="เพิ่มในชั้นนี้" style="font-weight:700">＋</button></div>
       <div id="addBox"></div>`;
-    body = (kidList.length ? `<div class="list">${kidList.map(tile).join('')}</div>` : '') + (here.length ? `<div class="list">${here.map(row).join('')}</div>` : '')
+    const selBtn = here.length > 1 || stockSel ? `<div style="display:flex;justify-content:flex-end;margin:6px 0"><button type="button" class="btn ghost small" id="selMode">${stockSel ? 'เลิกเลือก' : '☑ เลือกหลายรายการ (ย้ายกลุ่ม)'}</button></div>` : '';
+    body = (kidList.length && !stockSel ? `<div class="list">${kidList.map(tile).join('')}</div>` : '') + (here.length ? selBtn + `<div class="list">${here.map(row).join('')}</div>` : '')
       + (!kidList.length && !here.length ? '<div class="card s">ยังไม่มีของในกลุ่มนี้ · กด ＋ เพื่อเพิ่ม</div>' : '');
   }
   const dep = document.getElementById('depHost');
+  // กล่องแดง: อุปกรณ์เสีย/รอซ่อม (ในกลุ่มที่เปิดอยู่ · ชั้นบนสุด = ทั้งหมด)
+  const broken = stockItems.filter(i => i['สภาพ'] && (!cur || i.path === cur || i.path.startsWith(cur + SEP)));
+  const brokenBox = broken.length && !q ? `<details class="card" style="border:2px solid var(--bad);background:var(--badbg)"><summary class="t" style="cursor:pointer;color:var(--bad)">🔧 อุปกรณ์เสีย / รอซ่อม (${broken.length})</summary>
+    ${broken.map(i => `<div class="row" style="background:none;box-shadow:none;padding:6px 0;border-top:1px solid var(--line)"><div class="grow"><div class="t" style="font-size:15px">${esc(i['ชื่อสินค้า'])} · <span class="bad">${esc(i['สภาพ'])}</span></div><div class="s" style="font-size:12px">${esc(i['หมายเหตุสภาพ'] || '')} · ${esc(i.path)}</div></div>
+      <button class="btn ghost small" data-cond="${esc(i['รหัสสินค้า'])}">เปลี่ยนสภาพ</button></div>`).join('')}</details>` : '';
+  const groupsForMove = () => { const kidsP = allGroupPaths().filter(p => cur && p.startsWith(cur + SEP) && p.split(SEP).length === P.length + 1); return [...kidsP, ...allGroupPaths().filter(p => !kidsP.includes(p) && p !== cur)]; };
+  const selBar = stockSel ? `<div style="height:110px"></div><div style="position:fixed;left:0;right:0;bottom:0;z-index:3;background:var(--card);border-top:1px solid var(--border);padding:10px 16px calc(10px + env(safe-area-inset-bottom))">
+    <label for="mvTo">ย้าย ${stockSel.size} รายการที่เลือกไปกลุ่ม</label><div style="display:flex;gap:8px"><select id="mvTo" style="flex:1">${groupsForMove().map(p => `<option value="${esc(p)}">${esc(cur && p.startsWith(cur + SEP) ? '↳ ' + p.slice(cur.length + SEP.length) : p)}</option>`).join('')}</select>
+    <button class="btn small" id="mvGo" type="button" ${stockSel.size ? '' : 'disabled'}>ย้าย</button></div></div>` : '';
   app.innerHTML = `
     <div><label for="q">ค้นหาวัสดุ</label><input id="q" type="search" value="${esc(q)}" placeholder="ชื่อ รหัส ยี่ห้อ หรือกลุ่ม"></div>
-    <div id="m"></div>${crumbs}${body}`;
+    <div id="m"></div>${brokenBox}${crumbs}${body}${selBar}`;
+  const sm = document.getElementById('selMode'); if (sm) sm.onclick = () => { stockSel = stockSel ? null : new Set(); renderStock(q); };
+  app.querySelectorAll('[data-sel]').forEach(cb => cb.onchange = () => { cb.checked ? stockSel.add(cb.dataset.sel) : stockSel.delete(cb.dataset.sel); renderStock(q); });
+  const mg = document.getElementById('mvGo'); if (mg) mg.onclick = async () => {
+    const to = mvTo.value, codes = [...stockSel]; mg.disabled = true; mg.textContent = 'กำลังย้าย…';
+    const res = await call('stockItemsMove', {codes, path: to}); if (!res.ok) { mg.disabled = false; mg.textContent = 'ย้าย'; return flash(errMore(res)); }
+    stockItems.forEach(i => { if (codes.includes(i['รหัสสินค้า'])) i.path = to; }); stockSel = null; renderStock(q); flash('ย้าย ' + res.moved + ' รายการไป ' + to.split(SEP).pop() + ' แล้ว', true);
+  };
+  app.querySelectorAll('[data-cond]').forEach(b => b.onclick = () => { stockCond = stockCond === b.dataset.cond ? '' : b.dataset.cond; renderStock(q); });
+  app.querySelectorAll('[data-cdset]').forEach(b => b.onclick = async () => {
+    const it = stockItems.find(i => i['รหัสสินค้า'] === stockCond); if (!it) return;
+    const note = (b.closest('.card').querySelector('.cdNote') || {}).value || '';
+    b.disabled = true; const res = await call('stockCondition', {code: stockCond, state: b.dataset.cdset, note}); if (!res.ok) { b.disabled = false; return flash(errMore(res)); }
+    it['สภาพ'] = b.dataset.cdset === 'ใช้ได้' ? '' : b.dataset.cdset; it['หมายเหตุสภาพ'] = it['สภาพ'] ? todayISO() + ' ' + me.nickname + (note ? ': ' + note : '') : '';
+    stockCond = ''; renderStock(q); flash(it['สภาพ'] ? 'บันทึกว่า ' + it['สภาพ'] + ' แล้ว' : 'บันทึกว่าใช้ได้แล้ว', true);
+  });
   if (dep) app.appendChild(dep);
   const qi = document.getElementById('q');
   qi.oninput = () => { const v = qi.value; renderStock(v); const n = document.getElementById('q'); n.focus(); n.setSelectionRange(v.length, v.length); };
-  app.querySelectorAll('[data-go]').forEach(el => el.onclick = () => { stockPath = [...P, el.dataset.go]; stockEdit = ''; renderStock(''); scrollTo(0, 0); });
-  app.querySelectorAll('[data-up]').forEach(b => b.onclick = () => { stockPath = P.slice(0, +b.dataset.up); stockEdit = ''; renderStock(''); });
+  app.querySelectorAll('[data-go]').forEach(el => el.onclick = () => { stockPath = [...P, el.dataset.go]; stockEdit = ''; stockSel = null; renderStock(''); scrollTo(0, 0); });
+  app.querySelectorAll('[data-up]').forEach(b => b.onclick = () => { stockPath = P.slice(0, +b.dataset.up); stockEdit = ''; stockSel = null; renderStock(''); });
   app.querySelectorAll('button[data-code]').forEach(b => b.onclick = () => moveForm(b));
   app.querySelectorAll('[data-tobuy]').forEach(b => b.onclick = () => toBuyQuick(b));
   app.querySelectorAll('[data-iedit]').forEach(b => b.onclick = () => { stockEdit = stockEdit === 'i:' + b.dataset.iedit ? '' : 'i:' + b.dataset.iedit; renderStock(q); });
@@ -646,7 +683,8 @@ function shrinkCanvas(file, max) {
 const errMsg = r => ({
   missing_fields: 'กรอกข้อมูลให้ครบ', need_case: 'ของหมวดนี้ต้องเลือกเคสที่ใช้', need_lot: 'ของหมวดนี้ต้องใส่ Lot number',
   need_fee: 'ใส่ค่าแล็บ', need_note: 'พิมพ์ว่าต้องแก้อะไร', need_method: 'เลือกว่าใช้มิลลิ่งหรือ 3D print',
-  step_changed: 'งานนี้มีคนกดไปแล้ว รีเฟรชหน้าใหม่', not_your_step: 'ขั้นนี้ไม่ใช่ของคุณ'
+  step_changed: 'งานนี้มีคนกดไปแล้ว รีเฟรชหน้าใหม่', not_your_step: 'ขั้นนี้ไม่ใช่ของคุณ',
+  need_design: 'แนบดีไซน์สุดท้าย (STL + รูป + สเปก) ก่อน จึงจะติ๊กหมอเช็กดีไซน์ผ่าน', need_check: 'ติ๊กเช็ก ซี่ / ความยาว / สี / วัสดุ ให้ครบก่อน milling/print'
 }[r.error] || ('ทำรายการไม่สำเร็จ: ' + r.error));
 
 const flash = (text, ok) => { const m = document.getElementById('m'); if (m) { m.innerHTML = `<div class="msg ${ok ? 'ok' : 'err'}">${esc(text)}</div>`; window.scrollTo(0, 0); } };
@@ -721,6 +759,20 @@ async function viewCaseDetail(id) {
 
 // ===== แล็บ =====
 let openLabId = null;
+// v19k: ช่างรับทราบ + ดีไซน์สุดท้าย (รูป + STL + สเปก) เป็นเวอร์ชัน
+function labDesignHtml(l) {
+  if (l.kind !== 'ในบ้าน') return '';
+  const ds = l.designs || [], d = ds[ds.length - 1];
+  const ack = l.status === 'กำลังทำ' ? (l.ack ? `<div class="s" style="font-size:12px;color:var(--ok,#1a7f4b)">✓ ช่างรับทราบแล้ว: ${esc(l.ack)}</div>`
+    : `<div class="msg err" style="margin:6px 0;display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span class="grow">ช่างยังไม่กดรับทราบ${d ? 'ดีไซน์ v' + d.v : 'งานนี้'}</span><button type="button" class="btn small" data-lack>รับทราบ</button></div>`) : '';
+  return `${ack}<div style="margin:6px 0;padding:8px;border:1px solid var(--line);border-radius:10px">
+    ${d ? `<div class="t" style="font-size:14px">📐 ดีไซน์ล่าสุด v${d.v}</div>
+      <div class="s" style="font-size:13px">ซี่ <b>${esc(d.tooth)}</b> · ความยาว <b>${esc(d.length)}</b> · สี <b>${esc(d.shade)}</b> · วัสดุ <b>${esc(d.material)}</b>${d.note ? ' · ' + esc(d.note) : ''}</div>
+      <div class="s" style="font-size:12px"><a href="${esc(d.img)}" target="_blank" rel="noopener">ดูรูปดีไซน์</a> · <a href="${esc(d.stl)}" target="_blank" rel="noopener" data-raw="1">ไฟล์ STL</a> · ${esc(d.by)} ${esc(String(d.at).slice(5, 16))}</div>
+      ${ds.length > 1 ? `<div class="s bad" style="font-size:12px">เวอร์ชันเก่า v${ds.slice(0, -1).map(x => x.v).join(', v')} ยกเลิกแล้ว ห้ามใช้</div>` : ''}`
+      : '<div class="s">ยังไม่มีดีไซน์สุดท้าย · ต้องแนบก่อนหมอเช็กดีไซน์ผ่าน</div>'}
+    <button type="button" class="btn ghost small" data-ldes style="margin-top:6px">${d ? '+ แนบดีไซน์ใหม่ (แก้ดีไซน์)' : '+ แนบดีไซน์สุดท้าย'}</button><div class="ldesBox"></div></div>`;
+}
 // v19c: รายการขั้นแล็บในบ้านทั้งหมด ✓ เสร็จ (ใคร วันที่) · ▶ ขั้นปัจจุบัน · ขั้นถัดไปสีจาง
 function labStepsHtml(l, steps) {
   if (l.kind === 'ในบ้าน' && l.plan && l.plan.length) return `<div style="margin:6px 0;border-left:3px solid var(--line);padding-left:8px">${l.plan.map((s, i) => {
@@ -765,7 +817,7 @@ async function viewLab() {
       ? `ขั้น ${l.step}/${l.total || total}: ${esc(l.stepName)} (${esc(l.stepWho)})` : esc(l.status);
     return `<div class="card labcard" data-lab="${esc(l.id)}" data-step="${l.step}" id="lab-${esc(l.id)}">
       <div class="t">${esc(l.caseName)} · ${esc(l.work)}</div>${l.casePhoto ? `<a class="s" href="${esc(l.casePhoto)}" target="_blank" rel="noopener">📷 รูปเคส (NAS) ดูเคส/เลือกสี</a>` : ''}${l.casePath ? `<div class="s">📁 DS file: <b>${esc(l.casePath)}</b> <button type="button" class="btn ghost small" data-copy="${esc(l.casePath)}">คัดลอก</button></div>` : ''}
-      <div class="s">${esc(l.kind === 'ในบ้าน' ? 'แล็บในบ้าน' : l.lab)} · ${progress}</div>${editable ? `<div class="lp" data-lp="${esc(l.id)}"></div>` : labStepsHtml(l, steps)}
+      <div class="s">${esc(l.kind === 'ในบ้าน' ? 'แล็บในบ้าน' : l.lab)} · ${progress}</div>${labDesignHtml(l)}${editable ? `<div class="lp" data-lp="${esc(l.id)}"></div>` : labStepsHtml(l, steps)}
       <div class="s">${l.appt ? 'นัดคนไข้ ' + fmtDate(l.appt) : 'ยังไม่นัดคนไข้'}${l.due ? ' · นัดรับ ' + fmtDate(l.due) : ''}${l.fee ? ' · ' + baht(l.fee) + ' บาท' : ''}</div>
       ${w ? `<div class="s bad">${esc(w)}</div>` : ''}
       ${action}<div class="labform"></div></div>`;
@@ -825,12 +877,17 @@ async function viewLab() {
           <input type="checkbox" data-lpd="${i}" ${s.d ? 'checked' : ''} style="width:22px;height:22px;flex:none" aria-label="${esc(s.n)} เสร็จ">
           <span class="grow" style="font-size:14px;${i === cur ? 'font-weight:700' : s.d ? 'color:var(--muted)' : ''}">${i + 1}. ${esc(s.n)} <span class="s">(${esc(s.w || '-')})${s.d && s.by ? ' · ' + esc(s.by) + (m ? ' ' + (+m[3]) + '/' + (+m[2]) : '') : ''}</span></span>
           ${s.k === 'เลือกวิธี' && s.d ? `<select data-lpm="${i}" style="width:auto;padding:4px">${['', 'มิลลิ่ง', '3D print'].map(o => `<option ${o === (s.m || '') ? 'selected' : ''} value="${o}">${o || 'วิธี?'}</option>`).join('')}</select>` : ''}
-          <button type="button" class="btn ghost small" data-lpe="${i}" aria-label="แก้ขั้น">✎</button></div>`; }).join('')}</div>
+          <button type="button" class="btn ghost small" data-lpe="${i}" aria-label="แก้ขั้น">✎</button></div>
+          ${s.k === 'เลือกวิธี' && s.d && !(l.plan.find(o => o.id === s.id) || {}).d && (l.designs || []).length ? (() => { const d = l.designs[l.designs.length - 1];
+            return `<div class="msg err" style="margin:2px 0 6px 30px;padding:8px"><div class="s" style="color:inherit;font-weight:600">ก่อน milling/print เช็กกับดีไซน์ v${d.v}:</div>${[['tooth', 'ซี่ ' + d.tooth], ['length', 'ความยาว ' + d.length], ['shade', 'สี ' + d.shade], ['material', 'วัสดุ ' + d.material]].map(([k, t]) => `<label style="display:flex;gap:8px;align-items:center;color:var(--ink)"><input type="checkbox" data-lpc="${i}|${k}" ${(s.cl || []).includes(k) ? 'checked' : ''} style="width:20px;height:20px">${esc(t)} ✓ ตรงกับงาน</label>`).join('')}</div>`; })() : ''}`; }).join('')}</div>
         <details style="margin:4px 0"><summary class="s" style="cursor:pointer">+ เพิ่มขั้น</summary>
           <div style="display:grid;grid-template-columns:1fr 92px;gap:6px;margin-top:6px"><input data-lpan placeholder="ชื่อขั้นใหม่ เช่น ลองงานในปาก"><select data-lpaw>${WHO.map(w => `<option>${esc(w)}</option>`).join('')}</select>
           <select data-lpap aria-label="ใส่ต่อจาก">${P.map((s, i) => `<option value="${i + 1}" ${i === (cur < 0 ? P.length - 1 : cur) ? 'selected' : ''}>ต่อจากขั้น ${i + 1}</option>`).join('')}<option value="0">ไว้ขั้นแรก</option></select><button type="button" class="btn ghost small" data-lpa>เพิ่ม</button></div></details>
         <button type="button" class="btn small" data-lps style="width:100%;margin-top:6px" ${changed() ? '' : 'disabled'}>${changed() ? 'บันทึกขั้นงานแล็บ' : 'ติ๊กขั้นที่เสร็จ (ได้หลายขั้น) แล้วกดบันทึก'}</button>`;
-      host.querySelectorAll('[data-lpd]').forEach(cb => cb.onchange = () => { const i = +cb.dataset.lpd; P[i].d = cb.checked; if (!cb.checked) P[i].m = ''; render(); });
+      host.querySelectorAll('[data-lpd]').forEach(cb => cb.onchange = () => { const i = +cb.dataset.lpd;
+        if (cb.checked && P[i].k === 'ตรวจ' && /ดีไซน์|design/i.test(P[i].n) && !(l.designs || []).length) { cb.checked = false; return flash('แนบดีไซน์สุดท้าย (STL + รูป + สเปก) ก่อน จึงจะติ๊กผ่านได้'); }
+        P[i].d = cb.checked; if (!cb.checked) { P[i].m = ''; P[i].chk = false; P[i].cl = []; } render(); });
+      host.querySelectorAll('[data-lpc]').forEach(cb => cb.onchange = () => { const [i, k] = cb.dataset.lpc.split('|'); const s2 = P[+i]; s2.cl = s2.cl || []; cb.checked ? s2.cl.push(k) : s2.cl.splice(s2.cl.indexOf(k), 1); s2.chk = s2.cl.length === 4; });
       host.querySelectorAll('[data-lpm]').forEach(el => el.onchange = () => { P[+el.dataset.lpm].m = el.value; render(); });
       host.querySelectorAll('[data-lpe]').forEach(b => b.onclick = () => { edit = +b.dataset.lpe; render(); });
       const ok = host.querySelector('[data-lpok]');
@@ -841,9 +898,10 @@ async function viewLab() {
         P.splice(+host.querySelector('[data-lpap]').value, 0, {id: 'n' + Date.now(), n, w: host.querySelector('[data-lpaw]').value, k: 'ทำ', d: false}); render(); };
       host.querySelector('[data-lps]').onclick = async ev => {
         if (P.some(x => x.k === 'เลือกวิธี' && x.d && !x.m)) return flash('เลือกวิธีด้วย (มิลลิ่ง / 3D print)');
+        if ((l.designs || []).length && P.some(x => x.k === 'เลือกวิธี' && x.d && !(l.plan.find(o => o.id === x.id) || {}).d && !x.chk)) return flash('ติ๊กเช็ก ซี่ / ความยาว / สี / วัสดุ ให้ครบ 4 ข้อก่อน milling/print');
         if (new Set(P.map(x => x.n)).size !== P.length) return flash('มีชื่อขั้นซ้ำกัน แก้ชื่อก่อน');
         ev.target.disabled = true; ev.target.textContent = 'กำลังบันทึก…';
-        const res = await api('labPlanSave', {id: l.id, steps: P.map(x => ({id: x.id, n: x.n, w: x.w, k: x.k, b: x.b, d: x.d, m: x.m || ''}))}).catch(e => ({ok: false, error: e.message}));
+        const res = await api('labPlanSave', {id: l.id, steps: P.map(x => ({id: x.id, n: x.n, w: x.w, k: x.k, b: x.b, d: x.d, m: x.m || '', chk: !!x.chk}))}).catch(e => ({ok: false, error: e.message}));
         if (!res.ok) { render(); return flash(errMsg(res)); }
         openLabId = l.id; await viewLab(); flash(res.done ? 'ครบทุกขั้นแล้ว · งานพร้อมใส่' : 'บันทึกขั้นงานแล็บแล้ว', true);
       };
@@ -853,6 +911,35 @@ async function viewLab() {
 
   app.querySelectorAll('.labcard').forEach(cardEl => {
     const id = cardEl.dataset.lab, step = cardEl.dataset.step, box = cardEl.querySelector('.labform');
+    const lk = cardEl.querySelector('[data-lack]');
+    if (lk) lk.onclick = async () => { lk.disabled = true; const res = await api('labAck', {id}).catch(e => ({ok: false, error: e.message})); if (!res.ok) { lk.disabled = false; return flash(errMsg(res)); } openLabId = id; await viewLab(); flash('รับทราบแล้ว', true); };
+    const ld = cardEl.querySelector('[data-ldes]');
+    if (ld) ld.onclick = () => {
+      const db = cardEl.querySelector('.ldesBox'); if (db.innerHTML) { db.innerHTML = ''; return; }
+      const last = (r.labs.find(x => x.id === id).designs || []).slice(-1)[0] || {};
+      db.innerHTML = `<form style="margin-top:6px">
+        <label>ไฟล์ STL ดีไซน์สุดท้าย</label><input type="file" class="dsStl" accept=".stl,model/stl,application/sla,application/octet-stream" required>
+        <label>รูปหน้าจอดีไซน์ (เห็นตัวเลขความยาว)</label><input type="file" class="dsImg" accept="image/*" required>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:0 8px">
+          <div><label>ซี่</label><input class="dsT" required value="${esc(last.tooth || '')}"></div><div><label>ความยาว</label><input class="dsL" required placeholder="เช่น 10.5 มม." value="${esc(last.length || '')}"></div>
+          <div><label>สี</label><input class="dsS" required placeholder="เช่น A2" value="${esc(last.shade || '')}"></div><div><label>วัสดุ</label><input class="dsM" required placeholder="เช่น Zirconia" value="${esc(last.material || '')}"></div></div>
+        <label>หมายเหตุ (ถ้ามี)</label><input class="dsN">
+        <button class="btn small" type="submit" style="width:100%;margin-top:8px">บันทึกดีไซน์ ${last.v ? 'v' + (last.v + 1) + ' (v' + last.v + ' จะถูกยกเลิก)' : 'v1'}</button></form>`;
+      db.querySelector('form').onsubmit = async ev => {
+        ev.preventDefault(); const q = c => db.querySelector(c);
+        const sf = q('.dsStl').files[0], imf = q('.dsImg').files[0];
+        if (!sf || !imf) return flash('แนบทั้งไฟล์ STL และรูปหน้าจอ');
+        if (sf.size > 20 * 1024 * 1024) return flash('ไฟล์ STL ใหญ่เกิน 20 MB');
+        const sb = db.querySelector('button'); sb.disabled = true; sb.textContent = 'กำลังอัปโหลด…';
+        try {
+          const stl = await new Promise((ok, no) => { const fr = new FileReader(); fr.onload = () => ok(fr.result); fr.onerror = () => no(new Error('อ่านไฟล์ STL ไม่ได้')); fr.readAsDataURL(sf); });
+          const img = await shrinkImage(imf, 2000);
+          const res = await api('labDesign', {id, stl, img, tooth: q('.dsT').value, length: q('.dsL').value, shade: q('.dsS').value, material: q('.dsM').value, note: q('.dsN').value}).catch(e => ({ok: false, error: e.message}));
+          if (!res.ok) throw new Error({need_spec: 'กรอก ซี่ ความยาว สี วัสดุ ให้ครบ', need_stl: 'แนบไฟล์ STL', need_design_img: 'แนบรูปหน้าจอดีไซน์', bad_file: 'ไฟล์เสีย ลองใหม่'}[res.error] || errMsg(res));
+          openLabId = id; await viewLab(); flash('บันทึกดีไซน์ v' + res.v + ' แล้ว · แจ้งช่างให้กดรับทราบแล้ว', true);
+        } catch (e) { sb.disabled = false; sb.textContent = 'บันทึกดีไซน์'; flash(e.message); }
+      };
+    };
     const done = async (payload, okText) => {
       cardEl.querySelectorAll('button').forEach(x => x.disabled = true);
       const res = await api(payload.action, {id, ...payload}).catch(e => ({ok:false, error:e.message}));
@@ -962,22 +1049,47 @@ async function photosOf(input) {
 }
 
 // ---------- เช็กลิสต์ ----------
-async function viewChecklist() {
+async function viewChecklist(note) {
   app.innerHTML = '<div class="center">กำลังเช็ก…</div>';
   const r = await call('checklist');
   if (!r.ok) return showError('โหลดเช็กลิสต์ไม่ได้: ' + r.error);
   const names = {appt: 'นัดหมาย', lab: 'แล็บ', stock: 'สต็อก', cases: 'เคส', buy: 'ซื้อของ', daily: 'สรุปรายวัน', pay: 'เจ้าหนี้', df: 'DF', cap: 'ถ่ายเอกสาร'};
-  const mine = r.items.filter(x => x.mine), others = r.items.filter(x => !x.mine);
-  const row = x => `<div class="row"><div class="grow"><div class="s ${x.level === 'bad' ? 'bad' : 'warn'}">${esc(x.text)}</div>
+  // v19h: ต้องทำวันนี้ (ของฉัน) ขึ้นก่อน · ไม่ด่วนพับไว้ · ทุกรายการมีปุ่มจัดการ/เลื่อน · จัดการแล้วหายไป
+  const it = r.items.map((x, i) => ({...x, i}));
+  const row = x => `<div class="row" style="flex-wrap:wrap" data-ci="${x.i}"><div class="grow"><div class="s ${x.level === 'bad' ? 'bad' : 'warn'}" style="font-size:14px">${esc(x.text)}</div>
       ${x.who && !x.mine ? `<div class="s">ผู้รับผิดชอบ: ${esc(x.who)}</div>` : ''}</div>
-      <button class="btn ghost small" data-go="${esc(x.tab)}">${esc(names[x.tab] || 'เปิด')}</button></div>`;
-  app.innerHTML = `
-    <div class="card"><div class="t">${mine.length ? `งานของฉัน ${mine.length} เรื่อง` : '✅ งานของฉันไม่มีค้าง'}</div>
-      <div class="s">${r.dayOff ? 'วันนี้ ' + esc(r.dayOff) + ' · ' : ''}ระบบส่งเรื่องของแต่ละคนทาง LINE ตอน 08:00 และ 17:30</div></div>
-    <div class="list">${mine.map(row).join('') || '<div class="row s">เรียบร้อยดี</div>'}</div>
-    ${others.length ? `<div class="t">เรื่องอื่นในทีม (${others.length})</div><div class="list">${others.map(row).join('')}</div>` : ''}
+      <button class="btn ghost small" data-go="${esc(x.tab)}">${esc(names[x.tab] || 'เปิด')}</button>
+      <div class="labact" style="width:100%;margin-top:4px">${(x.actions || []).map(a => ({discard: '<button class="btn small" data-ca="discard">ทิ้งแล้ว</button>', ack: '<button class="btn ghost small" data-ca="ack">รับทราบ</button>', return: '<button class="btn ghost small" data-ca="return">ส่งคืน/ให้บริษัทเปลี่ยน</button>', editExp: '<button class="btn ghost small" data-ca="editExp">วันหมดอายุผิด</button>'}[a] || '')).join('')}
+        <button class="btn ghost small" data-ca="snooze" data-days="3">เลื่อน 3 วัน</button><button class="btn ghost small" data-ca="snooze" data-days="7">เลื่อน 7 วัน</button></div></div>`;
+  const grouped = list => { const out = [], seen = {};
+    list.forEach(x => { if (!x.group) return out.push(row(x)); if (seen[x.group]) return; seen[x.group] = 1;
+      const g = list.filter(y => y.group === x.group);
+      out.push(`<details class="card" style="margin:6px 0"><summary class="t" style="cursor:pointer;font-size:15px">${esc(x.group)} (${g.length})</summary><div class="list">${g.map(row).join('')}</div></details>`); });
+    return out.join(''); };
+  const mineU = it.filter(x => x.mine && x.urgent), mineN = it.filter(x => x.mine && !x.urgent), others = it.filter(x => !x.mine);
+  app.innerHTML = `<div id="m">${note ? `<div class="msg ok">${esc(note)}</div>` : ''}</div>
+    <div class="card"><div class="t">${mineU.length ? `🔴 ต้องทำวันนี้ ${mineU.length} เรื่อง` : '✅ วันนี้ไม่มีเรื่องด่วนของฉัน'}</div>
+      <div class="s">${r.dayOff ? 'วันนี้ ' + esc(r.dayOff) + ' · ' : ''}เรื่องด่วนส่ง LINE ตอน 08:00 และ 17:30 · เรื่องไม่ด่วนส่งเช้าวันจันทร์</div></div>
+    <div class="list">${mineU.map(row).join('') || '<div class="row s">เรียบร้อยดี</div>'}</div>
+    ${mineN.length ? `<details class="card"><summary class="t" style="cursor:pointer">รอจัดการ ไม่ด่วน (${mineN.length})</summary>${grouped(mineN)}</details>` : ''}
+    ${others.length ? `<details class="card"><summary class="t" style="cursor:pointer">เรื่องของคนอื่นในทีม (${others.length})</summary>${grouped(others)}</details>` : ''}
     <a class="btn ghost" style="display:flex;align-items:center;justify-content:center;text-decoration:none" href="${SOP_URL}" target="_blank" rel="noopener">เปิด SOP คลินิก (Google Sheet)</a>`;
   app.querySelectorAll('[data-go]').forEach(b => b.onclick = () => { location.hash = b.dataset.go; });
+  app.querySelectorAll('[data-ca]').forEach(b => b.onclick = async () => {
+    const x = it[+b.closest('[data-ci]').dataset.ci], a = b.dataset.ca, body = {key: x.key, act: a, code: x.code, exp: x.exp};
+    if (a === 'snooze') body.days = +b.dataset.days;
+    if (a === 'discard') {
+      const q = prompt('ทิ้งไปกี่ชิ้น/หน่วย?', ''); if (q === null || !(+q > 0)) return;
+      body.qty = +q;
+      const ne = prompt('ของที่เหลือหมดอายุวันไหน? (ปี-เดือน-วัน เช่น 2027-03-31 · ไม่มีของเหลือ/ไม่ทราบ เว้นว่าง)', ''); if (ne === null) return; body.newExp = ne.trim();
+    }
+    if (a === 'editExp') { const ne = prompt('วันหมดอายุที่ถูกต้อง (ปี-เดือน-วัน เช่น 2027-03-31)', x.exp || ''); if (!ne) return; body.newExp = ne.trim(); }
+    if (a === 'return') { const n = prompt('หมายเหตุ เช่น ส่งคืนบริษัทไหน (เว้นว่างได้)', ''); if (n === null) return; body.note = n; }
+    b.disabled = true;
+    const res = await call('checkAction', body);
+    if (!res.ok) { b.disabled = false; return flash(res.error === 'bad_date' ? 'วันที่ต้องเป็นแบบ 2027-03-31' : errMore(res)); }
+    viewChecklist({discard: 'บันทึกทิ้งแล้ว ตัดสต็อกให้แล้ว', ack: 'รับทราบแล้ว · จะเตือนอีกครั้งใน 30 วัน', return: 'บันทึกแล้ว · จะเตือนให้ตามบริษัทใน 14 วัน', editExp: 'แก้วันหมดอายุแล้ว', snooze: 'เลื่อนแล้ว ' + body.days + ' วัน'}[a]);
+  });
 }
 
 // ---------- ซื้อของ / ซ่อม / เงินกองกลาง ----------
@@ -1262,6 +1374,7 @@ async function viewCases2() {
       return `<div class="card pcard" style="padding:10px 12px">
         <div style="display:flex;align-items:center;gap:8px"><button type="button" data-pt="${esc(k)}" style="all:unset;cursor:pointer;flex:1;font-weight:700;font-size:16px">${esc(p.dn ? p.dn + ' ' : '')}${esc(p.name)} <span class="s" style="font-weight:400">›</span></button>
           <button class="btn ghost small" type="button" data-addjob="${esc(k)}" aria-label="เพิ่มงานให้ ${esc(p.name)}">＋</button></div>
+        <div class="s" style="font-size:13px;margin:2px 0 4px">${ptApptLine(p, k)}</div>
         ${js.map(jobLine).join('')}</div>`; }).join('');
   };
   app.innerHTML = `
@@ -1306,25 +1419,49 @@ async function viewCases2() {
 // บรรทัดงานในการ์ดคนไข้: งาน · นัดครั้งต่อไป · สถานะ
 function jobLine(c) {
   JOBS[c.id] = c;
-  const ap = c.appt ? `นัดครั้งหน้า ${fmtDate(c.appt.date)} ${esc(String(c.appt.start || '').slice(0, 5))}${c.appt.unlinked ? ' <span class="s" style="font-size:11px">(นัดไม่ระบุงาน)</span>' : ''}`
-    : ['จบเคส', 'ไม่รักษา'].includes(c.status) ? '' : `<button type="button" data-mkappt="${esc(c.id)}" style="all:unset;cursor:pointer;color:var(--bad);font-weight:600;text-decoration:underline">ยังไม่ได้นัด · กดลงนัด</button>`;
+  // v19i: คนไข้ 1 คน ใช้นัดเดียว · บรรทัดงานบอกแค่ว่างานนี้อยู่ในนัดครั้งหน้าไหม
+  const ap = c.ptAppt ? (c.inAppt ? '<span style="color:var(--ok,#1a7f4b)">✓ ทำในนัดครั้งหน้า</span>' : '<span class="s">ยังไม่ได้ติ๊กในนัดครั้งหน้า</span>') : '';
   const lab = /แล็บ/.test(c.status + ' ' + (c.wait || ''));
   const pillAttr = lab ? (c.labId ? `data-golab="${esc(c.labId)}"` : `data-newlab="${esc(c.id)}"`) : '';
   const due = c.due ? ` · <span class="bad" style="font-weight:600">${c.overdue ? 'เลยกำหนด' : 'ครบ'} ${fmtDate(c.due)}</span>` : '';
   return `<div class="row" data-case="${esc(c.id)}" style="cursor:pointer;padding:8px 0;border-top:1px solid var(--line);margin:0;background:none;box-shadow:none;border-radius:0">
     <div class="grow" style="min-width:0"><div class="t" style="font-size:15px">${esc(c.work)}</div>
-      <div class="s" style="font-size:12px">${ap}${due}${c.flags && c.flags.some(f => f.startsWith('มีของ')) ? ' · <span class="bad">รอของ</span>' : ''}</div></div>
+      <div class="s" style="font-size:12px">${ap}${ap && due ? '' : ''}${due ? (ap ? due : due.replace(/^ · /, '')) : ''}${c.flags && c.flags.some(f => f.startsWith('มีของ')) ? ' · <span class="bad">รอของ</span>' : ''}</div></div>
     ${pillAttr ? `<button type="button" class="pill" ${pillAttr} style="border:0;cursor:pointer;max-width:42%;white-space:normal;text-align:center;text-decoration:underline;${c.overdue ? 'background:var(--badbg);color:var(--bad)' : ''}">${esc(c.status)} ›</button>`
       : `<span class="pill" style="max-width:42%;white-space:normal;text-align:center;${c.overdue ? 'background:var(--badbg);color:var(--bad)' : ''}">${esc(c.status)}</span>`}<span class="s" style="padding-left:4px">›</span></div>`;
 }
+function ptApptLine(p, key) {
+  const a = p.ptAppt;
+  return a ? `📅 นัดครั้งหน้า <b>${fmtDate(a.date)} ${esc(String(a.start || '').slice(0, 5))}</b>${a.unit ? ' · ' + esc(a.unit) : ''}${a.work ? ' · ' + esc(a.work) : ''}`
+    : `<button type="button" data-mkpt="${esc(key)}" style="all:unset;cursor:pointer;color:var(--bad);font-weight:600;text-decoration:underline">ยังไม่ได้นัด · กดลงนัด</button>`;
+}
+// v19j: กดลิงก์รูป (Google Drive) → เปิดดูในเมนูเลย ไม่ต้องล็อกอิน Drive · owner + คนส่งเท่านั้น
+document.addEventListener('click', async e => {
+  const a = e.target.closest('a[href*="drive.google.com"]'); if (!a || a.dataset.raw) return;
+  e.preventDefault(); e.stopPropagation();
+  const ov = document.createElement('div');
+  ov.style.cssText = 'position:fixed;inset:0;z-index:50;background:rgba(0,0,0,.88);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:12px';
+  ov.innerHTML = '<button type="button" aria-label="ปิด" style="position:absolute;top:10px;right:12px;font-size:28px;color:#fff;background:none;border:0;cursor:pointer">✕</button><div style="color:#fff">กำลังเปิดรูป…</div>';
+  const close = () => ov.remove();
+  ov.querySelector('button').onclick = close; ov.onclick = ev => { if (ev.target === ov) close(); };
+  document.body.appendChild(ov);
+  const r = await call('photoView', {url: a.href}).catch(err => ({ok: false, error: err.message}));
+  if (!ov.isConnected) return;
+  if (!r.ok) { ov.querySelector('div').innerHTML = r.error === 'forbidden' ? 'รูปนี้ดูได้เฉพาะ owner และคนที่ส่งรูป' : `เปิดรูปในเมนูไม่ได้ · <a href="${a.href}" target="_blank" rel="noopener" style="color:#9cf">เปิดใน Drive</a>`; return; }
+  const box = ov.querySelector('div');
+  box.style.cssText = 'width:100%;height:100%;overflow:auto;display:flex;align-items:center;justify-content:center;touch-action:pinch-zoom';
+  box.innerHTML = r.type === 'application/pdf' ? `<iframe src="${r.data}" style="width:100%;height:100%;border:0;background:#fff" title="เอกสาร"></iframe>` : `<img src="${r.data}" alt="รูปเอกสาร" style="max-width:100%;max-height:100%;object-fit:contain">`;
+}, true);
 // v19b: กดสถานะรอแล็บ → ไปงานแล็บนั้น · กด "ยังไม่ได้นัด" → ไปลงนัด (เติม DN + ติ๊กงานให้)
 const JOBS = {};
 let pendingAppt = null, openLabNew = null;
 document.addEventListener('click', e => {
-  const g = e.target.closest('[data-golab],[data-newlab],[data-mkappt]'); if (!g) return;
+  const g = e.target.closest('[data-golab],[data-newlab],[data-mkappt],[data-mkpt]'); if (!g) return;
   e.preventDefault(); e.stopPropagation();
   if (g.dataset.golab) { openLabId = g.dataset.golab; if (location.hash === '#lab') route(); else location.hash = 'lab'; return; }
   if (g.dataset.newlab) { openLabNew = g.dataset.newlab; location.hash = 'lab'; return; }
+  if (g.dataset.mkpt) { const js = Object.values(JOBS).filter(j => j.key === g.dataset.mkpt && !['จบเคส', 'ไม่รักษา'].includes(j.status)); if (!js.length) return;
+    pendingAppt = {dn: js[0].dn || '', nick: js[0].name, doctor: js[0].dentist, caseId: js.map(j => j.id).join(',')}; location.hash = 'appt'; return; }
   const c = JOBS[g.dataset.mkappt]; if (!c) return;
   pendingAppt = {dn: c.dn || '', nick: c.name, doctor: c.dentist, caseId: c.id}; location.hash = 'appt';
 }, true);
@@ -1340,6 +1477,10 @@ async function viewPatient(key, o = {}) {
     <div class="card">
       <div style="display:flex;align-items:center;gap:8px"><div class="t grow" style="font-size:18px">${esc(r.dn ? r.dn + ' ' : '')}${esc(r.name)}</div>
         <button class="btn ghost small" type="button" id="addJobBtn" aria-label="เพิ่มงาน">＋ งาน</button></div>
+      <div class="s" style="font-size:14px;margin-top:6px">${r.jobs.length ? ptApptLine({ptAppt: r.nextAppt}, r.key) : ''}</div>
+      ${r.nextAppt && r.jobs.length ? `<details style="margin-top:6px" id="apJobs"><summary class="s" style="cursor:pointer">ติ๊กงานที่มาทำในนัดนี้ (${r.jobs.filter(j => r.nextAppt.caseIds.includes(j.id)).length}/${r.jobs.length})</summary>
+        ${r.jobs.map(j => `<label style="display:flex;gap:8px;align-items:center;padding:4px 0;color:var(--ink)"><input type="checkbox" data-apj="${esc(j.id)}" ${r.nextAppt.caseIds.includes(j.id) ? 'checked' : ''} style="width:20px;height:20px">${esc(j.work)}</label>`).join('')}
+        <button type="button" class="btn small" id="apJobsSave" style="margin-top:4px">บันทึกงานในนัดนี้</button></details>` : ''}
       ${r.photoUrl ? `<a class="btn ghost" href="${esc(r.photoUrl)}" target="_blank" rel="noopener" style="display:flex;align-items:center;justify-content:center;text-decoration:none;margin-top:8px">📷 เปิดรูปเคสใน NAS</a>` : ''}
       ${r.photoPath ? `<button type="button" class="btn ghost" data-copy="${esc(r.dn)}" style="width:100%;margin-top:8px">📁 DS file: ${esc(r.photoPath)} → โฟลเดอร์ ${esc(r.dn)} (กดคัดลอก DN)</button>` : ''}
     </div>
@@ -1364,6 +1505,12 @@ async function viewPatient(key, o = {}) {
     </div>
     <p class="note">กดที่งาน เพื่อดูขั้นตอน จองของ และงานแล็บของงานนั้น</p>`;
   document.getElementById('back').onclick = () => viewCases2();
+  r.jobs.forEach(j => { JOBS[j.id] = j; });
+  const ajs = document.getElementById('apJobsSave');
+  if (ajs) ajs.onclick = async () => { ajs.disabled = true;
+    const ids = [...app.querySelectorAll('[data-apj]:checked')].map(x => x.dataset.apj);
+    const res = await call('apptSetJobs', {id: r.nextAppt.id, caseIds: ids}); if (!res.ok) { ajs.disabled = false; return flash(errMore(res)); }
+    viewPatient(key, {msg: 'บันทึกงานในนัดครั้งหน้าแล้ว (' + ids.length + ' งาน)'}); };
   app.querySelectorAll('[data-case]').forEach(el => el.onclick = () => viewCase2(el.dataset.case));
   const jf = document.getElementById('jobForm');
   addJobBtn.onclick = () => { jf.hidden = !jf.hidden; if (!jf.hidden) jf.scrollIntoView({behavior: 'smooth', block: 'start'}); };
@@ -1407,7 +1554,7 @@ async function viewCase2(id, msg) {
       ${c.status === 'ไม่รักษา' && c.lostReason ? `<div class="s">เหตุผล: ${esc(c.lostReason)}</div>` : ''}
       <div style="margin-top:8px;display:flex;gap:8px;align-items:center;flex-wrap:wrap"><span class="s">ติดตามเคส</span>${c.appt
         ? `<span class="pill" style="background:var(--okbg,#e6f6ee);color:var(--ok,#1a7f4b)">นัดแล้ว</span><span class="s">นัดครั้งหน้า ${fmtDate(c.appt.date)} ${esc(String(c.appt.start || '').slice(0, 5))}${c.appt.work ? ' · ' + esc(c.appt.work) : ''}</span>`
-        : c.closed ? '<span class="s">-</span>' : `<button type="button" class="pill" data-mkappt="${esc(c.id)}" style="border:0;cursor:pointer;background:var(--badbg);color:var(--bad);text-decoration:underline">ยังไม่ได้นัด · กดลงนัด ›</button>`}${c.appt && c.appt.unlinked ? '<span class="s" style="font-size:11px">(นัดไม่ระบุงาน)</span>' : ''}</div>
+        : c.closed ? '<span class="s">-</span>' : c.ptAppt ? `<span class="s">คนไข้มีนัด ${fmtDate(c.ptAppt.date)} ${esc(String(c.ptAppt.start || '').slice(0, 5))} · งานนี้ยังไม่ได้ติ๊กในนัด (กด ‹ กลับ แล้วติ๊กที่หน้าคนไข้)</span>` : `<button type="button" class="pill" data-mkappt="${esc(c.id)}" style="border:0;cursor:pointer;background:var(--badbg);color:var(--bad);text-decoration:underline">ยังไม่ได้นัด · กดลงนัด ›</button>`}${c.appt && c.appt.unlinked ? '<span class="s" style="font-size:11px">(นัดไม่ระบุงาน)</span>' : ''}</div>
       <label for="cuDn">DN</label><input id="cuDn" value="${esc(c.dn)}">
       ${c.photoUrl ? `<a class="btn ghost" href="${esc(c.photoUrl)}" target="_blank" rel="noopener" style="display:flex;align-items:center;justify-content:center;text-decoration:none;margin-top:8px">📷 เปิดรูปเคสใน NAS</a>` : ''}
       ${c.photoPath ? `<button type="button" class="btn ghost" data-copy="${esc(c.dn)}" style="width:100%;margin-top:8px">📁 DS file: ${esc(c.photoPath)} → โฟลเดอร์ ${esc(c.dn)} (กดคัดลอก DN)</button>` : ''}
@@ -1770,7 +1917,7 @@ async function viewAppt(note) {
   window._renderJobs = renderJobs;
   if (pendingAppt) { const pa = pendingAppt; pendingAppt = null; apNew.open = true;
     afDn.value = pa.dn; afNick.value = pa.nick; if (r.doctors.includes(pa.doctor)) afDoc.value = pa.doctor; afCase.value = pa.caseId; renderJobs();
-    const picked = r.cases.find(x => x.id === pa.caseId); if (picked) afWork.value = picked.work;
+    const picked = r.cases.filter(x => pa.caseId.split(',').includes(x.id)); if (picked.length) afWork.value = picked.map(x => x.work).join(' + ');
     setTimeout(() => apNew.scrollIntoView({behavior: 'smooth', block: 'start'}), 50); flash('เลือกวัน เวลา แล้วกดลงนัด · งานนี้ติ๊กไว้ให้แล้ว', true); }
   document.getElementById('af').onsubmit = async ev => {
     ev.preventDefault();
@@ -1841,7 +1988,8 @@ async function loadTeamBox() {
   const list = r.team.filter(p => p.status !== 'ระงับ');
   box.innerHTML = `<div class="t">ทีมและหน้าที่</div>
     <div class="s">ติ๊กหน้าที่ แล้วแจ้งเตือนเรื่องนั้นจะเด้งเข้า LINE คนที่ถือหน้าที่ หน้าที่ไหนไม่มีคนถือ ระบบส่งหาหมอแทน</div>
-    ${list.map(p => `<div class="row" style="flex-wrap:wrap" data-tm="${esc(p.id)}"><div class="grow"><div class="t">${esc(p.nick)}${p.role === 'owner' ? ' · owner' : ''}</div><div class="s">${esc(p.position || '-')}</div></div>
+    ${list.map(p => `<div class="row" style="flex-wrap:wrap" data-tm="${esc(p.id)}"><div class="grow"><div class="t">${esc(p.nick)}${p.role === 'owner' ? ' · owner' : ''}</div>
+      <select data-pos aria-label="ตำแหน่งของ ${esc(p.nick)}" style="margin-top:4px;padding:4px 8px;width:auto">${(r.positions || []).concat((r.positions || []).includes(p.position) || !p.position ? [] : [p.position]).map(x => `<option ${x === p.position ? 'selected' : ''}>${esc(x)}</option>`).join('')}</select></div>
       ${p.status === 'รออนุมัติ' ? `<button class="btn small" data-ok="1">อนุมัติ</button><button class="btn ghost small" data-no="1">ไม่อนุมัติ</button>`
         : `<div class="cats" style="width:100%">${r.duties.map(d => `<button type="button" data-dt="${esc(d)}" aria-pressed="${p.duties.includes(d)}">${esc(d)}</button>`).join('')}</div>`}</div>`).join('')}`;
   box.querySelectorAll('[data-tm]').forEach(el => {
@@ -1852,6 +2000,7 @@ async function loadTeamBox() {
       const duties = [...el.querySelectorAll('[data-dt]')].filter(x => x.getAttribute('aria-pressed') === 'true').map(x => x.dataset.dt);
       if (!await save({duties})) b.setAttribute('aria-pressed', b.getAttribute('aria-pressed') !== 'true');
     });
+    const ps = el.querySelector('[data-pos]'); if (ps) ps.onchange = async () => { let v = ps.value; if (v === 'อื่นๆ') { const t = (prompt('ระบุตำแหน่ง เช่น แม่บ้าน', '') || '').trim(); if (t) v = 'อื่นๆ: ' + t; } if (await save({position: v})) flash('เปลี่ยนตำแหน่งแล้ว', true); };
     const ok = el.querySelector('[data-ok]'); if (ok) ok.onclick = async () => { if (await save({status: 'อนุมัติ'})) loadTeamBox(); };
     const no = el.querySelector('[data-no]'); if (no) no.onclick = async () => { if (await save({status: 'ระงับ'})) loadTeamBox(); };
   });
