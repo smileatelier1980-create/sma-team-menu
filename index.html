@@ -723,6 +723,9 @@ async function viewCaseDetail(id) {
 let openLabId = null;
 // v19c: รายการขั้นแล็บในบ้านทั้งหมด ✓ เสร็จ (ใคร วันที่) · ▶ ขั้นปัจจุบัน · ขั้นถัดไปสีจาง
 function labStepsHtml(l, steps) {
+  if (l.kind === 'ในบ้าน' && l.plan && l.plan.length) return `<div style="margin:6px 0;border-left:3px solid var(--line);padding-left:8px">${l.plan.map((s, i) => {
+    const cur = !s.d && l.plan.findIndex(x => !x.d) === i, m = String(s.at || '').match(/^(\d{4})-(\d{2})-(\d{2})/);
+    return `<div class="s" style="font-size:13px;padding:2px 0;${cur ? 'color:var(--ink);font-weight:700' : s.d ? '' : 'opacity:.55'}">${s.d ? '✓' : cur ? '▶' : '○'} ${i + 1}. ${esc(s.n)}${s.d ? (s.by ? ' · ' + esc(s.by) : '') + (m ? ' ' + (+m[3]) + '/' + (+m[2]) : '') + (s.m ? ' (' + esc(s.m) + ')' : '') : ' (' + esc(s.w || '-') + ')'}</div>`; }).join('')}</div>`;
   if (l.kind !== 'ในบ้าน' || !steps || !steps.length) return '';
   const hist = String(l.history || '').split('\n');
   const allDone = l.status !== 'กำลังทำ';
@@ -749,7 +752,9 @@ async function viewLab() {
   const card = l => {
     const w = warn(l);
     let action = '';
-    if (l.kind === 'ในบ้าน' && l.status === 'กำลังทำ' && l.mine) {
+    const editable = l.kind === 'ในบ้าน' && l.status === 'กำลังทำ' && l.plan;
+    if (editable) action = l.stepKind === 'ตรวจ' ? `<div class="labact"><button class="btn ghost small" data-act="fix">ขั้น "${esc(l.stepName)}" ไม่ผ่าน · ให้แก้</button></div>` : '';
+    else if (l.kind === 'ในบ้าน' && l.status === 'กำลังทำ' && l.mine) {
       if (l.stepKind === 'ตรวจ') action = `<div class="labact"><button class="btn small" data-act="pass">ผ่าน</button><button class="btn ghost small" data-act="fix">ให้แก้</button></div>`;
       else if (l.stepKind === 'เลือกวิธี') action = `<div class="labact"><button class="btn small" data-act="done" data-method="มิลลิ่ง">มิลลิ่งเสร็จ</button><button class="btn small" data-act="done" data-method="3D print">3D print เสร็จ</button></div>`;
       else action = `<div class="labact"><button class="btn small" data-act="done">${esc(l.stepName)} เสร็จ</button></div>`;
@@ -757,10 +762,10 @@ async function viewLab() {
     if (l.kind === 'นอก' && ['ส่งแล้ว', 'ส่งแก้'].includes(l.status)) action = `<div class="labact"><button class="btn small" data-act="receive">รับงานกลับ</button></div>`;
     if (['กลับมาแล้ว', 'พร้อมใส่'].includes(l.status)) action = `<div class="labact"><button class="btn small" data-act="fitted">ใส่ให้คนไข้แล้ว</button>${l.kind === 'นอก' ? '<button class="btn ghost small" data-act="redo">ส่งแก้</button>' : ''}</div>`;
     const progress = l.kind === 'ในบ้าน' && l.status === 'กำลังทำ'
-      ? `ขั้น ${l.step}/${total}: ${esc(l.stepName)} (${esc(l.stepWho)})` : esc(l.status);
+      ? `ขั้น ${l.step}/${l.total || total}: ${esc(l.stepName)} (${esc(l.stepWho)})` : esc(l.status);
     return `<div class="card labcard" data-lab="${esc(l.id)}" data-step="${l.step}" id="lab-${esc(l.id)}">
       <div class="t">${esc(l.caseName)} · ${esc(l.work)}</div>${l.casePhoto ? `<a class="s" href="${esc(l.casePhoto)}" target="_blank" rel="noopener">📷 รูปเคส (NAS) ดูเคส/เลือกสี</a>` : ''}${l.casePath ? `<div class="s">📁 DS file: <b>${esc(l.casePath)}</b> <button type="button" class="btn ghost small" data-copy="${esc(l.casePath)}">คัดลอก</button></div>` : ''}
-      <div class="s">${esc(l.kind === 'ในบ้าน' ? 'แล็บในบ้าน' : l.lab)} · ${progress}</div>${labStepsHtml(l, steps)}
+      <div class="s">${esc(l.kind === 'ในบ้าน' ? 'แล็บในบ้าน' : l.lab)} · ${progress}</div>${editable ? `<div class="lp" data-lp="${esc(l.id)}"></div>` : labStepsHtml(l, steps)}
       <div class="s">${l.appt ? 'นัดคนไข้ ' + fmtDate(l.appt) : 'ยังไม่นัดคนไข้'}${l.due ? ' · นัดรับ ' + fmtDate(l.due) : ''}${l.fee ? ' · ' + baht(l.fee) + ' บาท' : ''}</div>
       ${w ? `<div class="s bad">${esc(w)}</div>` : ''}
       ${action}<div class="labform"></div></div>`;
@@ -800,6 +805,51 @@ async function viewLab() {
     if (!res.ok) { b.disabled = false; return flash(errMsg(res)); }
     await viewLab(); flash('บันทึกส่งงานแล็บแล้ว', true);
   };
+
+  // v19e: ติ๊กได้หลายขั้น · เพิ่ม/แก้/ลบขั้น · บันทึกครั้งเดียวต่องาน
+  const WHO = [...new Set(['หมอ', ...(r.team || [])])];
+  app.querySelectorAll('[data-lp]').forEach(host => {
+    const l = r.labs.find(x => x.id === host.dataset.lp); if (!l) return;
+    const sig = arr => JSON.stringify(arr.map(x => [x.n, x.w, !!x.d, x.m || '']));
+    const orig = sig(l.plan);
+    const P = l.plan.map(x => ({...x, d: !!x.d}));
+    let edit = -1;
+    const changed = () => sig(P) !== orig;
+    const render = () => {
+      const cur = P.findIndex(x => !x.d);
+      host.innerHTML = `<div style="margin:6px 0;border-left:3px solid var(--line);padding-left:8px">${P.map((s, i) => {
+        if (edit === i) return `<div style="display:grid;grid-template-columns:1fr 92px;gap:6px;padding:4px 0"><input data-lpn value="${esc(s.n)}" aria-label="ชื่อขั้น"><select data-lpw aria-label="ใครทำ">${WHO.map(w => `<option ${w === s.w ? 'selected' : ''}>${esc(w)}</option>`).join('')}</select>
+          <button type="button" class="btn ghost small" data-lpok>ตกลง</button><button type="button" class="btn ghost small" data-lpx="${i}" style="color:var(--bad)">เอาขั้นนี้ออก</button></div>`;
+        const m = String(s.at || '').match(/^(\d{4})-(\d{2})-(\d{2})/);
+        return `<div style="display:flex;align-items:center;gap:8px;padding:3px 0">
+          <input type="checkbox" data-lpd="${i}" ${s.d ? 'checked' : ''} style="width:22px;height:22px;flex:none" aria-label="${esc(s.n)} เสร็จ">
+          <span class="grow" style="font-size:14px;${i === cur ? 'font-weight:700' : s.d ? 'color:var(--muted)' : ''}">${i + 1}. ${esc(s.n)} <span class="s">(${esc(s.w || '-')})${s.d && s.by ? ' · ' + esc(s.by) + (m ? ' ' + (+m[3]) + '/' + (+m[2]) : '') : ''}</span></span>
+          ${s.k === 'เลือกวิธี' && s.d ? `<select data-lpm="${i}" style="width:auto;padding:4px">${['', 'มิลลิ่ง', '3D print'].map(o => `<option ${o === (s.m || '') ? 'selected' : ''} value="${o}">${o || 'วิธี?'}</option>`).join('')}</select>` : ''}
+          <button type="button" class="btn ghost small" data-lpe="${i}" aria-label="แก้ขั้น">✎</button></div>`; }).join('')}</div>
+        <details style="margin:4px 0"><summary class="s" style="cursor:pointer">+ เพิ่มขั้น</summary>
+          <div style="display:grid;grid-template-columns:1fr 92px;gap:6px;margin-top:6px"><input data-lpan placeholder="ชื่อขั้นใหม่ เช่น ลองงานในปาก"><select data-lpaw>${WHO.map(w => `<option>${esc(w)}</option>`).join('')}</select>
+          <select data-lpap aria-label="ใส่ต่อจาก">${P.map((s, i) => `<option value="${i + 1}" ${i === (cur < 0 ? P.length - 1 : cur) ? 'selected' : ''}>ต่อจากขั้น ${i + 1}</option>`).join('')}<option value="0">ไว้ขั้นแรก</option></select><button type="button" class="btn ghost small" data-lpa>เพิ่ม</button></div></details>
+        <button type="button" class="btn small" data-lps style="width:100%;margin-top:6px" ${changed() ? '' : 'disabled'}>${changed() ? 'บันทึกขั้นงานแล็บ' : 'ติ๊กขั้นที่เสร็จ (ได้หลายขั้น) แล้วกดบันทึก'}</button>`;
+      host.querySelectorAll('[data-lpd]').forEach(cb => cb.onchange = () => { const i = +cb.dataset.lpd; P[i].d = cb.checked; if (!cb.checked) P[i].m = ''; render(); });
+      host.querySelectorAll('[data-lpm]').forEach(el => el.onchange = () => { P[+el.dataset.lpm].m = el.value; render(); });
+      host.querySelectorAll('[data-lpe]').forEach(b => b.onclick = () => { edit = +b.dataset.lpe; render(); });
+      const ok = host.querySelector('[data-lpok]');
+      if (ok) ok.onclick = () => { const n = host.querySelector('[data-lpn]').value.trim(); if (n) P[edit].n = n; P[edit].w = host.querySelector('[data-lpw]').value; edit = -1; render(); };
+      host.querySelectorAll('[data-lpx]').forEach(b => b.onclick = () => { if (P.length < 2) return flash('ต้องมีอย่างน้อย 1 ขั้น'); P.splice(+b.dataset.lpx, 1); edit = -1; render(); });
+      host.querySelector('[data-lpa]').onclick = () => { const n = host.querySelector('[data-lpan]').value.trim(); if (!n) return flash('พิมพ์ชื่อขั้นก่อน');
+        if (P.some(x => x.n === n)) return flash('มีขั้นชื่อนี้แล้ว');
+        P.splice(+host.querySelector('[data-lpap]').value, 0, {id: 'n' + Date.now(), n, w: host.querySelector('[data-lpaw]').value, k: 'ทำ', d: false}); render(); };
+      host.querySelector('[data-lps]').onclick = async ev => {
+        if (P.some(x => x.k === 'เลือกวิธี' && x.d && !x.m)) return flash('เลือกวิธีด้วย (มิลลิ่ง / 3D print)');
+        if (new Set(P.map(x => x.n)).size !== P.length) return flash('มีชื่อขั้นซ้ำกัน แก้ชื่อก่อน');
+        ev.target.disabled = true; ev.target.textContent = 'กำลังบันทึก…';
+        const res = await api('labPlanSave', {id: l.id, steps: P.map(x => ({id: x.id, n: x.n, w: x.w, k: x.k, b: x.b, d: x.d, m: x.m || ''}))}).catch(e => ({ok: false, error: e.message}));
+        if (!res.ok) { render(); return flash(errMsg(res)); }
+        openLabId = l.id; await viewLab(); flash(res.done ? 'ครบทุกขั้นแล้ว · งานพร้อมใส่' : 'บันทึกขั้นงานแล็บแล้ว', true);
+      };
+    };
+    render();
+  });
 
   app.querySelectorAll('.labcard').forEach(cardEl => {
     const id = cardEl.dataset.lab, step = cardEl.dataset.step, box = cardEl.querySelector('.labform');
