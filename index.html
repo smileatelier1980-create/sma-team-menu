@@ -721,6 +721,18 @@ async function viewCaseDetail(id) {
 
 // ===== แล็บ =====
 let openLabId = null;
+// v19c: รายการขั้นแล็บในบ้านทั้งหมด ✓ เสร็จ (ใคร วันที่) · ▶ ขั้นปัจจุบัน · ขั้นถัดไปสีจาง
+function labStepsHtml(l, steps) {
+  if (l.kind !== 'ในบ้าน' || !steps || !steps.length) return '';
+  const hist = String(l.history || '').split('\n');
+  const allDone = l.status !== 'กำลังทำ';
+  return `<div style="margin:6px 0;border-left:3px solid var(--line);padding-left:8px">${steps.map((s, i) => {
+    const n = i + 1, done = allDone || n < l.step, cur = !allDone && n === l.step;
+    const h = done ? hist.filter(x => x.includes(s.name)).pop() : '';
+    const m = h && h.match(/^(\d{4})-(\d{2})-(\d{2}) [\d:]+ ([^:]+):/);
+    const who = m ? ` · ${esc(m[4].trim())} ${+m[3]}/${+m[2]}` : '';
+    return `<div class="s" style="font-size:13px;padding:2px 0;${cur ? 'color:var(--ink);font-weight:700' : done ? '' : 'opacity:.55'}">${done ? '✓' : cur ? '▶' : '○'} ${n}. ${esc(s.name)}${done ? who : ` (${esc(s.who || '-')})`}</div>`; }).join('')}</div>`;
+}
 async function viewLab() {
   app.innerHTML = '<div class="center">กำลังโหลดงานแล็บ…</div>';
   const r = await api('labs').catch(e => ({ok:false, error:e.message}));
@@ -748,7 +760,7 @@ async function viewLab() {
       ? `ขั้น ${l.step}/${total}: ${esc(l.stepName)} (${esc(l.stepWho)})` : esc(l.status);
     return `<div class="card labcard" data-lab="${esc(l.id)}" data-step="${l.step}" id="lab-${esc(l.id)}">
       <div class="t">${esc(l.caseName)} · ${esc(l.work)}</div>${l.casePhoto ? `<a class="s" href="${esc(l.casePhoto)}" target="_blank" rel="noopener">📷 รูปเคส (NAS) ดูเคส/เลือกสี</a>` : ''}${l.casePath ? `<div class="s">📁 DS file: <b>${esc(l.casePath)}</b> <button type="button" class="btn ghost small" data-copy="${esc(l.casePath)}">คัดลอก</button></div>` : ''}
-      <div class="s">${esc(l.kind === 'ในบ้าน' ? 'แล็บในบ้าน' : l.lab)} · ${progress}</div>
+      <div class="s">${esc(l.kind === 'ในบ้าน' ? 'แล็บในบ้าน' : l.lab)} · ${progress}</div>${labStepsHtml(l, steps)}
       <div class="s">${l.appt ? 'นัดคนไข้ ' + fmtDate(l.appt) : 'ยังไม่นัดคนไข้'}${l.due ? ' · นัดรับ ' + fmtDate(l.due) : ''}${l.fee ? ' · ' + baht(l.fee) + ' บาท' : ''}</div>
       ${w ? `<div class="s bad">${esc(w)}</div>` : ''}
       ${action}<div class="labform"></div></div>`;
@@ -1380,7 +1392,7 @@ async function viewCase2(id, msg) {
     <div class="list">${r.materials.length ? r.materials.map(m => `<div class="row"><div class="grow"><div class="t">${esc(m.item)} × ${esc(m.qty)}</div>
       <div class="s">${esc(m.by)}${m.lot ? ' · Lot ' + esc(m.lot) : ''}</div></div></div>`).join('') : '<div class="row s">ยังไม่มี (เบิกที่แท็บสต็อกแล้วเลือกเคสนี้)</div>'}</div>
     <div class="t">งานแล็บ</div>
-    <div class="list">${r.labs.length ? r.labs.map(l => `<div class="row" ${l.id ? `data-golab="${esc(l.id)}" style="cursor:pointer"` : ''}><div class="grow"><div class="t">${esc(l.work)} · ${esc(l.lab)}</div><div class="s">${esc(l.status)}${l.id ? ' · กดเพื่อไปติ๊กงานแล็บ' : ''}</div></div>${l.id ? '<span class="s">›</span>' : ''}</div>`).join('') : `<div class="row s">ยังไม่มี · <button type="button" class="btn ghost small" data-newlab="${esc(c.id)}">+ ส่งงานแล็บ</button></div>`}</div>
+    <div class="list">${r.labs.length ? r.labs.map(l => `<div class="row" ${l.id ? `data-golab="${esc(l.id)}" style="cursor:pointer"` : ''}><div class="grow"><div class="t">${esc(l.work)} · ${esc(l.lab)}</div><div class="s">${esc(l.status)}${l.id ? ' · กดเพื่อไปติ๊กงานแล็บ' : ''}</div>${labStepsHtml(l, r.labSteps)}</div>${l.id ? '<span class="s">›</span>' : ''}</div>`).join('') : `<div class="row s">ยังไม่มี · <button type="button" class="btn ghost small" data-newlab="${esc(c.id)}">+ ส่งงานแล็บ</button></div>`}</div>
     <div style="text-align:center;margin-top:18px">${c.status === 'ไม่รักษา'
       ? '<button class="btn ghost small" type="button" id="reopen">เปิดเคสต่อ</button>'
       : c.closed ? '' : '<button class="btn ghost small" type="button" id="lostBtn" style="color:var(--bad)">คนไข้ไม่รักษาต่อ</button>'}<div class="s warn" id="lostNote"></div></div>
