@@ -1440,12 +1440,14 @@ async function viewCase2(id, msg) {
       return v.rows.filter(rw => rw.code && (rw.code !== '__t' || rw.text.trim())).map(rw => ({cat: x.gum ? 'ปลูกเหงือก' : x.label, code: rw.code === '__t' ? '' : rw.code, text: rw.code === '__t' ? rw.text.trim() : '', qty: rw.qty || 1, lot: rw.lot.trim(), tooth: rw.tooth.trim()})); }),
     gum: st.gum.use && st.gum.choice === 'CTG' ? 'CTG' : '', none: SURG.filter(x => st[x.k].use === false).map(x => x.label)}));
   // S = รายการขั้นตามลำดับที่เห็น (ขั้นเดิม + ขั้นใหม่ที่ยังไม่บันทึก)
-  const S = r.steps.map(s => ({...s, note: s.note || '', orig: {name: s.name, wait: s.wait, due: s.due, note: s.note || ''}}));
+  const S = r.steps.map(s => ({...s, note: s.note || '', owner: s.owner || '', orig: {name: s.name, wait: s.wait, due: s.due, note: s.note || '', owner: s.owner || ''}}));
+  const AUTO = r.autoOwners || {}, TEAM = (r.team || []).map(p => p.nick);
+  const ownerOf = s => s.owner || AUTO[s.wait] || '';
   const origOrder = S.map(s => s.id).join('|');
   let tmpN = 0, editing = null;
   const today = todayISO();
   const effStatus = s => { const p = P.steps[s.id]; return p ? ({done: 'เสร็จ', skip: 'ข้าม', undo: 'รอ'}[p.decision]) : s.status; };
-  const edited = s => !s.isNew && (s.name !== s.orig.name || s.wait !== s.orig.wait || s.due !== s.orig.due || s.note !== s.orig.note);
+  const edited = s => !s.isNew && (s.name !== s.orig.name || s.wait !== s.orig.wait || s.due !== s.orig.due || s.note !== s.orig.note || s.owner !== s.orig.owner);
   const reordered = () => S.filter(s => !s.isNew).map(s => s.id).join('|') !== origOrder;
   const orderChanged = () => reordered() || S.some(s => s.isNew);
   const cuIds = ['cuDn', 'cuPhoto'];
@@ -1464,12 +1466,13 @@ async function viewCase2(id, msg) {
       <span class="drag" data-drag="${esc(s.id)}" aria-label="ลากเพื่อเรียงลำดับ" style="touch-action:none;cursor:grab;font-size:22px;line-height:1;padding:4px 8px 4px 0;color:var(--muted,#888);user-select:none">≡</span>
       <div class="grow" style="min-width:0">
         ${ed ? `<input data-en="${esc(s.id)}" value="${esc(s.name)}" placeholder="ชื่อขั้น เช่น รอส่ง consult" style="margin:0 0 6px">
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:0 8px"><select data-ew="${esc(s.id)}">${WAITS.map(w => `<option value="${esc(w)}"${w === (s.wait || '') ? ' selected' : ''}>${w ? 'รอ' + esc(w) : 'รอใคร'}</option>`).join('')}</select>
-          <input type="date" data-ed="${esc(s.id)}" value="${esc(s.due || '')}"></div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:0 8px"><select data-ew="${esc(s.id)}" aria-label="รอใคร">${WAITS.map(w => `<option value="${esc(w)}"${w === (s.wait || '') ? ' selected' : ''}>${w ? 'รอ' + esc(w) : 'รอใคร'}</option>`).join('')}</select>
+          <select data-eo="${esc(s.id)}" aria-label="ผู้ดูแล"><option value="">${AUTO[s.wait] ? 'ผู้ดูแล: ' + esc(AUTO[s.wait]) + ' (อัตโนมัติ)' : 'ผู้ดูแล: เลือก'}</option>${TEAM.map(n => `<option value="${esc(n)}"${n === s.owner ? ' selected' : ''}>${esc(n)}</option>`).join('')}</select></div>
+          ${s.wait === 'เวลา' || s.due ? `<label class="s" style="display:block;margin-top:6px">ครบกำหนด<input type="date" data-ed="${esc(s.id)}" value="${esc(s.due || '')}" style="margin-top:2px"></label>` : ''}
           <input data-eno="${esc(s.id)}" value="${esc(s.note || '')}" placeholder="หมายเหตุ (ถ้ามี)" style="margin:6px 0 0">
           <button class="btn ghost small" type="button" data-eok="1" style="margin-top:6px">ตกลง</button>`
         : `<div class="${open ? 't' : 's'}" style="${open ? '' : 'text-decoration:line-through'}">${i + 1}. ${esc(s.name || '(ยังไม่ตั้งชื่อ)')}</div>
-          <div class="s" style="font-size:12px">${s.wait ? 'รอ' + esc(s.wait) : ''}${s.note ? ' · ' + esc(s.note) : ''}${!open ? ' · ' + esc(es) + (s.doneAt && !p ? ' ' + fmtDate(s.doneAt) + ' ' + esc(s.by) : '') : ''}</div>
+          <div class="s" style="font-size:12px">${s.wait ? 'รอ' + esc(s.wait) : ''}${open && ownerOf(s) ? ' · ผู้ดูแล ' + esc(ownerOf(s)) : ''}${s.note ? ' · ' + esc(s.note) : ''}${!open ? ' · ' + esc(es) + (s.doneAt && !p ? ' ' + fmtDate(s.doneAt) + ' ' + esc(s.by) : '') : ''}</div>
           ${s.due && open ? `<div class="bad" style="font-size:12px;font-weight:600">${overdue ? 'เลยกำหนด' : 'ครบกำหนด'} ${fmtDate(s.due)}</div>` : ''}`}
         ${pend ? `<div class="s warn" style="font-size:12px">${pend}</div>` : ''}</div>
       <div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end">
@@ -1500,7 +1503,8 @@ async function viewCase2(id, msg) {
     stepList.querySelectorAll('[data-edit]').forEach(b => b.onclick = () => { editing = b.dataset.edit; refresh(); const inp = stepList.querySelector('[data-en]'); if (inp) inp.focus(); });
     stepList.querySelectorAll('[data-eok]').forEach(b => b.onclick = () => { editing = null; refresh(); });
     stepList.querySelectorAll('[data-en]').forEach(el => el.oninput = () => { S.find(x => x.id === el.dataset.en).name = el.value; refreshBar(); });
-    stepList.querySelectorAll('[data-ew]').forEach(el => el.onchange = () => { S.find(x => x.id === el.dataset.ew).wait = el.value; refreshBar(); });
+    stepList.querySelectorAll('[data-ew]').forEach(el => el.onchange = () => { S.find(x => x.id === el.dataset.ew).wait = el.value; refresh(); });
+    stepList.querySelectorAll('[data-eo]').forEach(el => el.onchange = () => { S.find(x => x.id === el.dataset.eo).owner = el.value; refreshBar(); });
     stepList.querySelectorAll('[data-ed]').forEach(el => el.onchange = () => { S.find(x => x.id === el.dataset.ed).due = el.value; refreshBar(); });
     stepList.querySelectorAll('[data-eno]').forEach(el => el.oninput = () => { S.find(x => x.id === el.dataset.eno).note = el.value; refreshBar(); });
     stepList.querySelectorAll('[data-rmnew]').forEach(b => b.onclick = () => { const i = S.findIndex(x => x.id === b.dataset.rmnew); if (i > -1) S.splice(i, 1); if (editing === b.dataset.rmnew) editing = null; refresh(); });
@@ -1607,8 +1611,8 @@ async function viewCase2(id, msg) {
     if (miss.length) { const box = stepList.querySelector('[data-surgbox]'); if (box) box.scrollIntoView({behavior: 'smooth', block: 'center'}); return flash('ของที่ใช้ยังไม่ครบ: ' + miss.join(', ') + ' · ใช้ = เลือกของ · ไม่ใช้ = ติ๊ก'); }
     const line = (S.find(s => s.line) || {}).line || '';
     const body = {id, steps: Object.values(P.steps),
-      stepEdits: S.filter(edited).map(s => ({id: s.id, name: s.name.trim(), wait: s.wait, due: s.due, note: s.note.trim()})),
-      adds: newOnes().map(s => ({tmp: s.id, name: s.name.trim(), wait: s.wait, due: s.due, line: s.line || line, note: s.note || ''})),
+      stepEdits: S.filter(edited).map(s => ({id: s.id, name: s.name.trim(), wait: s.wait, due: s.due, note: s.note.trim(), owner: s.owner || ''})),
+      adds: newOnes().map(s => ({tmp: s.id, name: s.name.trim(), wait: s.wait, due: s.due, line: s.line || line, note: s.note || '', owner: s.owner || ''})),
       order: orderChanged() ? S.map(s => s.id) : [],
       reserves: P.reserves, unres: [...P.unres], surgery: surgPayload()};
     if (caseChanged() || P.lost || P.reopen) {
