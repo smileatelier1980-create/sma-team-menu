@@ -1605,6 +1605,12 @@ async function viewCase2(id, msg) {
   const SURG = [{k: 'implant', label: 'รากเทียม', cats: ['รากเทียม'], tooth: true}, {k: 'bone', label: 'กระดูก', cats: ['กระดูก']},
     {k: 'mem', label: 'เมมเบรน', cats: ['เมมเบรน']}, {k: 'gum', label: 'ปลูกเหงือก', cats: ['เมมเบรน'], gum: true}, {k: 'suture', label: 'ไหม', cats: ['ไหมเย็บ']}];
   const isSurg = s => /ฝังราก|ปลูกกระดูก|ปลูกเหงือก/.test(s.name || '');
+  // v28.1 รอกระดูกติด: หมอเลือกกี่เดือน → ตั้งวันครบของขั้น "รอกระดูก…" ให้
+  const BONE_M = [3, 4, 6, 9, 12];
+  const isBoneWait = s => /รอกระดูก/.test(s.name || '');
+  const addMonthsISO = (d, n) => { const [y, m, dd] = d.split('-').map(Number); const x = new Date(Date.UTC(y, m - 1 + n, 1));
+    const last = new Date(Date.UTC(x.getUTCFullYear(), x.getUTCMonth() + 1, 0)).getUTCDate(); x.setUTCDate(Math.min(dd, last)); return x.toISOString().slice(0, 10); };
+  const boneStepAfter = sid => { const i = S.findIndex(x => x.id === sid); const nx = S.slice(i + 1).find(x => !x.isNew && effStatus(x) === 'รอ'); return nx && isBoneWait(nx) ? nx : null; };
   const ITEMS = r.reservable || [];
   const newSurg = () => { const o = {}; SURG.forEach(x => { o[x.k] = {use: null, choice: '', rows: []}; });
     r.reserves.forEach(rv => { const it = ITEMS.find(i => i.code === rv.code); const sec = it && SURG.find(x => !x.gum && x.cats.includes(it.cat));
@@ -1614,6 +1620,8 @@ async function viewCase2(id, msg) {
     return `<option value="">เลือก (ยี่ห้อ/ขนาด)</option>${[...new Set(its.map(g))].map(gr => `<optgroup label="${esc(gr)}">${its.filter(i => g(i) === gr).map(i => `<option value="${esc(i.code)}" ${i.code === sel ? 'selected' : ''}>${esc(i.name)} (เหลือ ${i.left ?? i.free})</option>`).join('')}</optgroup>`).join('')}<option value="__t" ${sel === '__t' ? 'selected' : ''}>อื่นๆ (พิมพ์เอง)</option>`; };
   const surgHtml = sid => { const st = P.surg[sid]; if (!st) return '';
     return `<div class="card" data-surgbox="${esc(sid)}" style="margin:4px 0 10px;border:2px solid var(--warn);padding:10px">
+      ${boneStepAfter(sid) ? `<div style="padding:0 0 8px"><b>รอกระดูกติดกี่เดือน</b><div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:4px">${BONE_M.map(n => `<button type="button" class="btn ghost small" data-bmo="${esc(sid)}" data-n="${n}" aria-pressed="${st.boneMonths === n}" style="${st.boneMonths === n ? 'outline:3px solid var(--accent,#0f766e)' : ''}">${n} เดือน</button>`).join('')}</div>
+        ${st.boneMonths ? `<div class="s" style="margin-top:4px">ขั้น "${esc(boneStepAfter(sid).name)}" ครบกำหนด ${fmtDate(addMonthsISO(today, st.boneMonths))}</div>` : ''}</div>` : ''}
       <div class="t" style="font-size:15px">ของที่ใช้ในขั้นนี้</div><div class="s" style="margin-bottom:6px">ใช้ = เลือกของ/เติม · ไม่ใช้ = ติ๊ก "ไม่ใช้" · ของในสต็อกจะตัดให้เอง</div>
       ${SURG.map(x => { const v = st[x.k];
         return `<div style="padding:6px 0;border-top:1px solid var(--line)"><div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap"><b style="min-width:76px">${x.label}</b>
@@ -1628,11 +1636,12 @@ async function viewCase2(id, msg) {
             ${LOT_CATS.some(c => x.cats.includes(c)) && row.code && row.code !== '__t' ? `<input data-sf="${esc(sid)}|${x.k}|${i}|lot" value="${esc(row.lot)}" placeholder="Lot (ข้างกล่อง · ถ้ามี)" style="margin-top:6px">` : ''}`).join('')
             + `<button type="button" class="btn ghost small" data-suadd="${esc(sid)}|${x.k}" style="margin-top:6px">+ ${v.rows.length ? 'อีกรายการ' : 'เลือกของ'}</button>` : ''}</div>`; }).join('')}</div>`; };
   const surgMissing = () => { const miss = [];
+    Object.entries(P.surg).forEach(([sid, st]) => { if (boneStepAfter(sid) && !st.boneMonths) miss.push('รอกระดูกติดกี่เดือน'); });
     Object.entries(P.surg).forEach(([sid, st]) => SURG.forEach(x => { const v = st[x.k];
       if (v.use === null) miss.push(x.label);
       else if (v.use && (!x.gum || v.choice === 'Collagen membrane') && !v.rows.some(rw => rw.code && (rw.code !== '__t' || rw.text.trim()))) miss.push(x.label + ' (ยังไม่เลือกของ)'); }));
     return miss; };
-  const surgPayload = () => Object.entries(P.surg).map(([sid, st]) => ({stepId: sid,
+  const surgPayload = () => Object.entries(P.surg).map(([sid, st]) => ({stepId: sid, boneMonths: boneStepAfter(sid) ? st.boneMonths || 0 : 0, boneStepId: (boneStepAfter(sid) || {}).id || '',
     items: SURG.flatMap(x => { const v = st[x.k]; if (!v.use || (x.gum && v.choice !== 'Collagen membrane')) return [];
       return v.rows.filter(rw => rw.code && (rw.code !== '__t' || rw.text.trim())).map(rw => ({cat: x.gum ? 'ปลูกเหงือก' : x.label, code: rw.code === '__t' ? '' : rw.code, text: rw.code === '__t' ? rw.text.trim() : '', qty: rw.qty || 1, lot: rw.lot.trim(), tooth: rw.tooth.trim()})); }),
     gum: st.gum.use && st.gum.choice === 'CTG' ? 'CTG' : '', none: SURG.filter(x => st[x.k].use === false).map(x => x.label)}));
@@ -1666,6 +1675,7 @@ async function viewCase2(id, msg) {
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:0 8px"><select data-ew="${esc(s.id)}" aria-label="รอใคร">${WAITS.map(w => `<option value="${esc(w)}"${w === (s.wait || '') ? ' selected' : ''}>${w ? 'รอ' + esc(w) : 'รอใคร'}</option>`).join('')}</select>
           <select data-eo="${esc(s.id)}" aria-label="ผู้ดูแล"><option value="">${AUTO[s.wait] ? 'ผู้ดูแล: ' + esc(AUTO[s.wait]) + ' (อัตโนมัติ)' : 'ผู้ดูแล: เลือก'}</option>${TEAM.map(n => `<option value="${esc(n)}"${n === s.owner ? ' selected' : ''}>${esc(n)}</option>`).join('')}</select></div>
           ${s.wait === 'เวลา' || s.due ? `<label class="s" style="display:block;margin-top:6px">ครบกำหนด<input type="date" data-ed="${esc(s.id)}" value="${esc(s.due || '')}" style="margin-top:2px"></label>` : ''}
+          ${isBoneWait(s) ? `<div class="s" style="margin-top:4px">รอกี่เดือน (นับจาก ${fmtDate((S[i - 1] && S[i - 1].doneAt) || today)})</div><div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:2px">${BONE_M.map(n => `<button type="button" class="btn ghost small" data-bme="${esc(s.id)}" data-n="${n}">${n} เดือน</button>`).join('')}</div>` : ''}
           <input data-eno="${esc(s.id)}" value="${esc(s.note || '')}" placeholder="หมายเหตุ (ถ้ามี)" style="margin:6px 0 0">
           <button class="btn ghost small" type="button" data-eok="1" style="margin-top:6px">ตกลง</button>`
         : `<div class="${open ? 't' : 's'}" style="${open ? '' : 'text-decoration:line-through'}">${i + 1}. ${esc(s.name || '(ยังไม่ตั้งชื่อ)')}</div>
@@ -1693,6 +1703,9 @@ async function viewCase2(id, msg) {
       else if (val === '1') { v.use = v.use === true ? null : true; if (v.use && !v.rows.length) v.rows.push({code: '', qty: 1, lot: '', tooth: '', text: ''}); }
       else { const on = !(v.use && v.choice === val); v.use = on ? true : null; v.choice = on ? val : ''; if (on && val === 'Collagen membrane' && !v.rows.length) v.rows.push({code: '', qty: 1, lot: '', tooth: '', text: ''}); }
       refresh(); });
+    stepList.querySelectorAll('[data-bmo]').forEach(b => b.onclick = () => { const st = P.surg[b.dataset.bmo], n = +b.dataset.n; st.boneMonths = st.boneMonths === n ? 0 : n; refresh(); });
+    stepList.querySelectorAll('[data-bme]').forEach(b => b.onclick = () => { const i = S.findIndex(x => x.id === b.dataset.bme), st = S[i], n = +b.dataset.n;
+      st.due = addMonthsISO(String((S[i - 1] && S[i - 1].doneAt) || today).slice(0, 10), n); st.note = 'รอ ' + n + ' เดือน'; refresh(); });
     stepList.querySelectorAll('[data-suadd]').forEach(b => b.onclick = () => { const [sid, k] = b.dataset.suadd.split('|'); P.surg[sid][k].rows.push({code: '', qty: 1, lot: '', tooth: '', text: ''}); refresh(); });
     stepList.querySelectorAll('[data-sf]').forEach(el => { const [sid, k, i, f] = el.dataset.sf.split('|');
       const set = () => { P.surg[sid][k].rows[+i][f] = el.value; };
