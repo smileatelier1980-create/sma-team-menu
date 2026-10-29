@@ -1666,7 +1666,7 @@ async function viewCase2(id, msg) {
   const stepHtml = (s, i) => {
     const es = effStatus(s), open = es === 'รอ', p = P.steps[s.id];
     const pend = s.isNew ? 'ขั้นใหม่ (ยังไม่บันทึก)' : p ? '→ ' + ({done: 'เสร็จ', skip: 'ข้าม', undo: 'ย้อนกลับมารอ'}[p.decision]) + ' (ยังไม่บันทึก)' : edited(s) ? 'แก้แล้ว (ยังไม่บันทึก)' : '';
-    const overdue = s.due && s.due < today;
+    const overdue = s.due && s.due < today, hideDue = overdue && !!c.ptAppt; // v29.1 มีนัดครั้งหน้าแล้ว ไม่ขึ้นเลยกำหนด
     const ed = editing === s.id;
     return `<div class="row" data-sid="${esc(s.id)}" style="align-items:flex-start;${s.isNew || p || edited(s) ? 'background:var(--warnbg,#fff7e6)' : ''}">
       <span class="drag" data-drag="${esc(s.id)}" aria-label="ลากเพื่อเรียงลำดับ" style="touch-action:none;cursor:grab;font-size:22px;line-height:1;padding:4px 8px 4px 0;color:var(--muted,#888);user-select:none">≡</span>
@@ -1680,7 +1680,7 @@ async function viewCase2(id, msg) {
           <button class="btn ghost small" type="button" data-eok="1" style="margin-top:6px">ตกลง</button>`
         : `<div class="${open ? 't' : 's'}" style="${open ? '' : 'text-decoration:line-through'}">${i + 1}. ${esc(s.name || '(ยังไม่ตั้งชื่อ)')}</div>
           <div class="s" style="font-size:12px">${s.wait ? 'รอ' + esc(s.wait) : ''}${open && ownerOf(s) ? ' · ผู้ดูแล ' + esc(ownerOf(s)) : ''}${s.note ? ' · ' + esc(s.note) : ''}${!open ? ' · ' + esc(es) + (s.doneAt && !p ? ' ' + fmtDate(s.doneAt) + ' ' + esc(s.by) : '') : ''}</div>
-          ${s.due && open ? `<div class="bad" style="font-size:12px;font-weight:600">${overdue ? 'เลยกำหนด' : 'ครบกำหนด'} ${fmtDate(s.due)}</div>` : ''}`}
+          ${s.due && open && !hideDue ? `<div class="bad" style="font-size:12px;font-weight:600">${overdue ? 'เลยกำหนด' : 'ครบกำหนด'} ${fmtDate(s.due)}</div>` : ''}`}
         ${pend ? `<div class="s warn" style="font-size:12px">${pend}</div>` : ''}</div>
       <div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end">
         ${ed ? '' : `<button class="btn ghost small" type="button" data-edit="${esc(s.id)}" aria-label="แก้ขั้น">✎</button>`}
@@ -1753,7 +1753,7 @@ async function viewCase2(id, msg) {
     const live = close || (c.status === 'ไม่รักษา' && !P.reopen ? c.status : first ? first.name : S.some(s => s.name.trim()) ? 'จบเคส' : 'รอแผนจากหมอ');
     liveSt.textContent = live;
     liveHint.textContent = live !== c.status ? '(หลังบันทึก · ตอนนี้ ' + c.status + ')' : '';
-    liveDue.textContent = !close && first ? (first.wait ? 'รอ' + first.wait : '') + (first.due ? (first.wait ? ' · ' : '') + (first.due < today ? 'เลยกำหนด ' : 'ครบกำหนด ') + fmtDate(first.due) : '') : '';
+    liveDue.textContent = !close && first ? (first.wait ? 'รอ' + first.wait : '') + (first.due && !(first.due < today && c.ptAppt) ? (first.wait ? ' · ' : '') + (first.due < today ? 'เลยกำหนด ' : 'ครบกำหนด ') + fmtDate(first.due) : '') : '';
   };
   const refresh = () => {
     renderSteps(); refreshBar();
