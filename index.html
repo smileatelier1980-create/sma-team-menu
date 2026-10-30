@@ -238,6 +238,10 @@ function enter() {
   tabs.hidden = false;
   tabs.querySelectorAll('[data-owner]').forEach(b => b.hidden = me.role !== 'owner');
   tabs.querySelectorAll('[data-doctor]').forEach(b => b.hidden = !(me.role === 'owner' || me.position === 'ทันตแพทย์'));
+  // v33.1 หมอที่ไม่ใช่เจ้าของ เห็นเฉพาะเมนูที่ได้สิทธิ์ (นัดของตัวเอง + DF + ที่เจ้าของเปิดให้)
+  if (me.tabs) { tabs.querySelectorAll('button').forEach(b => { if (!me.tabs.includes(b.dataset.tab)) b.hidden = true; });
+    if (START_PAGE && !me.tabs.includes(START_PAGE)) START_PAGE = me.tabs[0];
+    if (!me.tabs.includes((location.hash || '#').slice(1) || 'tasks')) { try { history.replaceState(null, '', location.pathname + '#' + me.tabs[0]); } catch (e) {} } }
   tabs.querySelectorAll('button').forEach(b => b.onclick = () => { location.hash = b.dataset.tab; });
   if (START_PAGE && location.hash.slice(1) !== START_PAGE) { try { history.replaceState(null, '', location.pathname + '#' + START_PAGE); } catch (e) { location.hash = START_PAGE; } }
   START_PAGE = '';
@@ -249,7 +253,8 @@ function route(refresh) {
   if (!refresh) dirty = false;
   const tab = (location.hash ? location.hash.slice(1) : pageFromUrl()) || 'tasks';
   tabs.querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', b.dataset.tab === tab));
-  const page = tab === 'schedule' ? 'cases' : tab;
+  let page = tab === 'schedule' ? 'cases' : tab;
+  if (me && me.tabs && !me.tabs.includes(page) && page !== 'patient') page = me.tabs[0];
   tabs.querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', b.dataset.tab === page));
   ({tasks: viewTasks, stock: viewStock, team: viewTeam, cases: viewCases2, lab: viewLab, buy: viewBuy, daily: () => viewDaily2(), checklist: viewChecklist, appt: () => viewAppt(), cap: () => viewCapture(), pay: () => viewPay(), df: () => viewDF()}[page] || soon)(page);
 }
@@ -681,6 +686,7 @@ function shrinkCanvas(file, max) {
 }
 
 const errMsg = r => ({
+  no_permission: 'ยังไม่ได้รับสิทธิ์เมนูนี้ · ขอให้หมอเดียร์เปิดให้ในแท็บทีมงาน',
   missing_fields: 'กรอกข้อมูลให้ครบ', need_case: 'ของหมวดนี้ต้องเลือกเคสที่ใช้', need_lot: 'ของหมวดนี้ต้องใส่ Lot number',
   need_fee: 'ใส่ค่าแล็บ', need_note: 'พิมพ์ว่าต้องแก้อะไร', need_method: 'เลือกว่าใช้มิลลิ่งหรือ 3D print',
   step_changed: 'งานนี้มีคนกดไปแล้ว รีเฟรชหน้าใหม่', not_your_step: 'ขั้นนี้ไม่ใช่ของคุณ',
@@ -1898,8 +1904,8 @@ async function viewAppt(note) {
         ${f.note ? `<div class="s">${esc(f.note)}</div>` : ''}</div>
         <div class="labact" style="width:100%"><button class="btn small" data-fnew="1">ลงนัดใหม่</button><button class="btn ghost small" data-fsn="1">โทรแล้ว ยังไม่สะดวก</button><button class="btn ghost small" data-fcl="1">ปิด</button></div>
         <div class="flBox" style="width:100%"></div></div>`).join('')}</details>` : ''}
-    <div class="t">นัด ${new Date(apptDate + 'T12:00:00').toLocaleDateString('th-TH', {weekday: 'long', day: 'numeric', month: 'short'})} (${r.list.length})</div>
-    ${r.list.length ? r.units.map(u => `<div class="s" style="margin-top:4px"><b>${esc(u)}</b> · ${byUnit(u).length} นัด</div>${byUnit(u).map(card).join('') || '<div class="card s">ว่างทั้งวัน</div>'}`).join('') : '<div class="card center">ยังไม่มีนัดวันนี้</div>'}
+    <div class="t">นัด${r.mineOnly ? 'ของ ' + esc(r.mineOnly) : ''} ${new Date(apptDate + 'T12:00:00').toLocaleDateString('th-TH', {weekday: 'long', day: 'numeric', month: 'short'})} (${r.list.length})</div>
+    ${r.list.length ? (r.mineOnly ? r.units.filter(u => byUnit(u).length) : r.units).map(u => `<div class="s" style="margin-top:4px"><b>${esc(u)}</b> · ${byUnit(u).length} นัด</div>${byUnit(u).map(card).join('') || '<div class="card s">ว่างทั้งวัน</div>'}`).join('') : '<div class="card center">ยังไม่มีนัดวันนี้</div>'}
     <p class="note">ปฏิทิน "นัดคนไข้ Smile Art" อัปเดตตามเมนูนี้อัตโนมัติ ห้ามแก้ในปฏิทินตรงๆ</p>`;
 
   apPrev.onclick = () => shift(-1); apNext.onclick = () => shift(1);
@@ -1994,6 +2000,7 @@ async function viewAppt(note) {
   });
 }
 // ทีมและหน้าที่ (owner): อนุมัติคนลงทะเบียน + ติ๊กหน้าที่ แจ้งเตือนจะส่งหาคนตามหน้าที่
+const TAB_LABEL = {tasks: 'งานของฉัน', checklist: 'งานค้าง', cases: 'เคส', stock: 'สต็อก', lab: 'แล็บ', buy: 'ซื้อของ', cap: 'ถ่ายเอกสาร', daily: 'สรุปรายวัน', team: 'ลงเวลา/ขอลา'};
 async function loadTeamBox() {
   const box = document.getElementById('teamBox'); if (!box) return;
   const r = await call('teamList');
@@ -2004,7 +2011,9 @@ async function loadTeamBox() {
     ${list.map(p => `<div class="row" style="flex-wrap:wrap" data-tm="${esc(p.id)}"><div class="grow"><div class="t">${esc(p.nick)}${p.role === 'owner' ? ' · owner' : ''}</div>
       <select data-pos aria-label="ตำแหน่งของ ${esc(p.nick)}" style="margin-top:4px;padding:4px 8px;width:auto">${(r.positions || []).concat((r.positions || []).includes(p.position) || !p.position ? [] : [p.position]).map(x => `<option ${x === p.position ? 'selected' : ''}>${esc(x)}</option>`).join('')}</select></div>
       ${p.status === 'รออนุมัติ' ? `<button class="btn small" data-ok="1">อนุมัติ</button><button class="btn ghost small" data-no="1">ไม่อนุมัติ</button>`
-        : `<div class="cats" style="width:100%">${r.duties.map(d => `<button type="button" data-dt="${esc(d)}" aria-pressed="${p.duties.includes(d)}">${esc(d)}</button>`).join('')}</div>`}</div>`).join('')}`;
+        : `<div class="cats" style="width:100%">${r.duties.map(d => `<button type="button" data-dt="${esc(d)}" aria-pressed="${p.duties.includes(d)}">${esc(d)}</button>`).join('')}</div>
+          ${p.role !== 'owner' && String(p.position || '').split(':')[0].trim() === 'ทันตแพทย์' ? `<div class="s" style="width:100%;margin-top:6px">เห็นได้: นัดของตัวเอง · DF ของตัวเอง · เปิดเมนูเพิ่ม:</div>
+            <div class="cats" style="width:100%">${(r.grantTabs || []).map(t => `<button type="button" data-pm="${t}" aria-pressed="${(p.perms || []).includes(t)}">${esc(TAB_LABEL[t] || t)}</button>`).join('')}</div>` : ''}`}</div>`).join('')}`;
   box.querySelectorAll('[data-tm]').forEach(el => {
     const id = el.dataset.tm;
     const save = async body => { const res = await call('teamSet', {id, ...body}); if (!res.ok) flash(errMore(res)); return res.ok; };
@@ -2012,6 +2021,11 @@ async function loadTeamBox() {
       b.setAttribute('aria-pressed', b.getAttribute('aria-pressed') !== 'true');
       const duties = [...el.querySelectorAll('[data-dt]')].filter(x => x.getAttribute('aria-pressed') === 'true').map(x => x.dataset.dt);
       if (!await save({duties})) b.setAttribute('aria-pressed', b.getAttribute('aria-pressed') !== 'true');
+    });
+    el.querySelectorAll('[data-pm]').forEach(b => b.onclick = async () => {
+      b.setAttribute('aria-pressed', b.getAttribute('aria-pressed') !== 'true');
+      const perms = [...el.querySelectorAll('[data-pm]')].filter(x => x.getAttribute('aria-pressed') === 'true').map(x => x.dataset.pm);
+      if (!await save({perms})) b.setAttribute('aria-pressed', b.getAttribute('aria-pressed') !== 'true'); else flash('ตั้งสิทธิ์เมนูแล้ว · มีผลตอนเปิดเมนูใหม่', true);
     });
     const ps = el.querySelector('[data-pos]'); if (ps) ps.onchange = async () => { let v = ps.value; if (v === 'อื่นๆ') { const t = (prompt('ระบุตำแหน่ง เช่น แม่บ้าน', '') || '').trim(); if (t) v = 'อื่นๆ: ' + t; } if (await save({position: v})) flash('เปลี่ยนตำแหน่งแล้ว', true); };
     const ok = el.querySelector('[data-ok]'); if (ok) ok.onclick = async () => { if (await save({status: 'อนุมัติ'})) loadTeamBox(); };
