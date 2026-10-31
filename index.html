@@ -129,7 +129,18 @@ async function apiNet(action, data = {}) {
     return await apiOnce(action, data);
   }
 }
+// v40.1 token LINE หมดอายุ (เปิดเมนูค้างไว้นาน) → ล็อกอินใหม่ให้เอง 1 ครั้ง ไม่ต้องให้คนกด
+function reLogin() {
+  try { const t = Number(sessionStorage.getItem('sma_relogin') || 0); if (Date.now() - t < 60000) return false; sessionStorage.setItem('sma_relogin', String(Date.now())); } catch (e) {}
+  try { liff.logout(); } catch (e) {}
+  liff.login({ redirectUri: location.href });
+  return true;
+}
+function tokenExpired() {
+  try { const d = liff.getDecodedIDToken(); return !d || (d.exp * 1000) < Date.now() + 60000; } catch (e) { return false; }
+}
 async function apiOnce(action, data = {}) {
+  if (tokenExpired() && reLogin()) return new Promise(() => {});
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), 40000);
   try {
@@ -139,7 +150,9 @@ async function apiOnce(action, data = {}) {
       body: JSON.stringify({action, idToken: liff.getIDToken(), ...data}),
       signal: ctrl.signal
     });
-    return await res.json();
+    const j = await res.json();
+    if (j && j.error === 'invalid_token' && reLogin()) return new Promise(() => {});
+    return j;
   } catch (e) {
     throw new Error(e.name === 'AbortError' ? 'ระบบตอบช้าเกินไป ลองใหม่อีกครั้ง' : e.message);
   } finally {
@@ -185,7 +198,7 @@ async function start() {
     if (r.error === 'not_approved' && r.staff && r.staff.status === 'รออนุมัติ') return waiting();
     if (r.error === 'not_approved' && r.staff && r.staff.status === 'ระงับ') { who.textContent = ''; return showError('บัญชีนี้ถูกระงับสิทธิ์ ติดต่อเจ้าของคลินิก'); }
     if (r.error === 'not_approved') return registerForm();
-    if (r.error === 'invalid_token') { who.textContent = ''; return showError('ยืนยันตัวตนกับ LINE ไม่ผ่าน ให้ตรวจ LOGIN_CHANNEL_ID ใน Apps Script'); }
+    if (r.error === 'invalid_token') { who.textContent = ''; return showError('ยืนยันตัวตนกับ LINE ไม่ผ่าน ลองปิดเมนูแล้วเปิดใหม่ (ถ้ายังไม่ได้ แจ้งหมอเดียร์)'); }
     showError('เชื่อมต่อระบบไม่ได้ (' + (r.error || 'ไม่ทราบสาเหตุ') + ')');
   } catch (e) {
     showError('เชื่อมต่อไม่สำเร็จ: ' + e.message);
