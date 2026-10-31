@@ -67,6 +67,7 @@ a{color:var(--accent)}
   <button data-tab="cap">📷 ถ่ายเอกสาร</button>
   <button data-tab="daily">สรุปรายวัน</button>
   <button data-tab="pay" data-owner>เจ้าหนี้</button>
+  <button data-tab="payroll" data-owner>เงินเดือน</button>
   <button data-tab="df" data-doctor>DF</button>
   <button data-tab="team">ทีมงาน</button>
 </nav>
@@ -86,7 +87,7 @@ const fmtDate = v => { if (!v) return ''; const d = new Date(v); return isNaN(d)
 
 // ข้อมูลที่เปิดดูบ่อย: โชว์ของเดิมที่จำไว้ทันที แล้วดึงของใหม่ตามหลัง (ถ้าต่างและยังไม่ได้พิมพ์อะไร → วาดหน้าใหม่)
 const READ_ACTIONS = new Set(['stockTree', 'dailyToday', 'apptDay', 'checklist', 'buyHome', 'stock', 'caseList', 'labs', 'myTasks', 'today', 'myRequests', 'pending',
-  'teamList', 'payHome', 'myCases', 'caseInfo', 'leaveHome', 'capHome', 'dfHome', 'reserved', 'myLabSteps', 'patients', 'tasksHome', 'patientInfo']);
+  'teamList', 'payHome', 'payrollHome', 'myCases', 'caseInfo', 'leaveHome', 'capHome', 'dfHome', 'reserved', 'myLabSteps', 'patients', 'tasksHome', 'patientInfo']);
 const memGet = k => { try { return JSON.parse(localStorage.getItem('sma_c_' + k) || 'null'); } catch (e) { return null; } };
 const memSet = (k, v) => { try { localStorage.setItem('sma_c_' + k, JSON.stringify(v)); } catch (e) {} };
 const memClear = () => { try { Object.keys(localStorage).filter(k => k.startsWith('sma_c_')).forEach(k => localStorage.removeItem(k)); } catch (e) {} };
@@ -256,7 +257,7 @@ function route(refresh) {
   let page = tab === 'schedule' ? 'cases' : tab;
   if (me && me.tabs && !me.tabs.includes(page) && page !== 'patient') page = me.tabs[0];
   tabs.querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', b.dataset.tab === page));
-  ({tasks: viewTasks, stock: viewStock, team: viewTeam, cases: viewCases2, lab: viewLab, buy: viewBuy, daily: () => viewDaily2(), checklist: viewChecklist, appt: () => viewAppt(), cap: () => viewCapture(), pay: () => viewPay(), df: () => viewDF()}[page] || soon)(page);
+  ({tasks: viewTasks, stock: viewStock, team: viewTeam, cases: viewCases2, lab: viewLab, buy: viewBuy, daily: () => viewDaily2(), checklist: viewChecklist, appt: () => viewAppt(), cap: () => viewCapture(), pay: () => viewPay(), payroll: () => viewPayroll(), df: () => viewDF()}[page] || soon)(page);
   if (page === 'appt' || page === 'cases') bgCalSync(page);
 }
 // v34.1 ดึงปฏิทินแยกเบื้องหลัง (ไม่ให้หน้าเมนูรอ) · มีนัดเปลี่ยน → โหลดหน้าใหม่เงียบ ๆ
@@ -2402,6 +2403,35 @@ async function viewPay(note) {
 const addDaysISO = (d, n) => { const x = new Date(d + 'T12:00:00'); x.setDate(x.getDate() + n); return x.toLocaleDateString('en-CA'); };
 
 // ---------- DF ----------
+// ---------- v36.1 เงินเดือน (owner เท่านั้น) ----------
+async function viewPayroll(month) {
+  if (me.role !== 'owner') return showError('เมนูนี้สำหรับเจ้าของคลินิก');
+  month = month || window._prMonth || todayISO().slice(0, 7); window._prMonth = month;
+  app.innerHTML = '<div class="center">กำลังโหลด…</div>';
+  const r = await call('payrollHome', { month });
+  if (!r.ok) return showError('โหลดไม่ได้: ' + r.error);
+  const th = 'style="text-align:left;padding:4px 6px;border-bottom:1px solid var(--line)"', td = 'style="padding:4px 6px;border-bottom:1px solid var(--line)"';
+  const payRows = list => list.length ? `<table style="width:100%;border-collapse:collapse;font-size:14px"><tr><th ${th}>ใคร</th><th ${th}>ยอด</th><th ${th}>วันที่</th></tr>${list.map(x => `<tr><td ${td}>${esc(x.who)}${x.ref ? `<div class="s" style="font-size:11px">${esc(x.ref)}</div>` : ''}</td><td ${td}>${baht(x.amount)}</td><td ${td}>${esc(x.date)}${x.status !== 'จ่ายแล้ว' ? ' · ' + esc(x.status) : ''}</td></tr>`).join('')}</table>` : '<p class="s">ยังไม่มี</p>';
+  const people = r.people.map(p => `<div class="row" style="flex-wrap:wrap;align-items:flex-start"><div class="grow"><div class="t">${esc(p.nickname)} <span class="s">${esc(p.position || '')}</span></div>
+      <div class="s">${p.clock ? `มาทำงาน ${p.daysWorked} วัน · สาย ${p.lateCount} วัน · ขาด ${p.absentDays} วัน${p.absentDays ? ' (' + p.absentDates.map(d => +d.slice(8)).join(', ') + ')' : ''} · เบี้ยขยัน ${baht(p.allowance)}` : 'ไม่ต้องลงเวลา'}</div>
+      <div class="s">โอที ${p.otHours} ชม. = ${baht(p.otPay)} · ทำงานวันหยุด ${p.holidayDays} วัน = ${baht(p.holidayPay)}</div>
+      ${p.leaves && p.leaves.length ? `<div class="s">ลา: ${p.leaves.map(esc).join(' · ')}</div>` : ''}</div><div style="text-align:right"><div class="t">${baht(p.total)}</div><div class="s" style="font-size:11px">เบี้ย+โอที</div></div></div>`).join('') || '<p class="s">ไม่มีรายการ</p>';
+  const byNick = {}; r.attendance.forEach(a => (byNick[a.nick] = byNick[a.nick] || []).push(a));
+  const att = Object.keys(byNick).map(n => `<details style="margin:6px 0"><summary class="t" style="cursor:pointer">${esc(n)} (${byNick[n].length} วัน)</summary>
+      <table style="width:100%;border-collapse:collapse;font-size:13px"><tr><th ${th}>วันที่</th><th ${th}>เข้า</th><th ${th}>ออก</th><th ${th}>สาย</th></tr>${byNick[n].map(a => `<tr><td ${td}>${esc(a.date)}${a.off ? ' <span class="s">(วันหยุด)</span>' : ''}</td><td ${td}>${esc(a.in)}</td><td ${td}>${esc(a.out || '-')}</td><td ${td}${a.late ? ' class="bad"' : ''}>${a.late ? a.late + ' นาที' + (a.reason ? ' · ' + esc(a.reason) : '') : '-'}</td></tr>`).join('')}</table></details>`).join('') || '<p class="s">ยังไม่มีการลงเวลาในเดือนนี้</p>';
+  const reqs = r.requests.length ? r.requests.map(q => `<div class="s">${esc(q.date)}${q.dateTo && q.dateTo !== q.date ? '–' + esc(q.dateTo) : ''} · ${esc(q.nick)} · ${esc(q.type)}${q.start ? ' ' + esc(q.start) + '–' + esc(q.end) : ''} · ${esc(q.reason)} · <b>${esc(q.status)}</b></div>`).join('') : '<p class="s">ไม่มี</p>';
+  app.innerHTML = `<div class="card"><div class="t">เงินเดือนและการเข้างาน</div><p class="s">หน้านี้เห็นเฉพาะเจ้าของคลินิก</p>
+      <label for="prM">เดือน</label><input id="prM" type="month" value="${esc(r.month)}"></div>
+    <div class="card"><div class="t">เงินเดือนที่โอนแล้ว · รวม ${baht(r.salaryTotal)} บาท</div>${payRows(r.salaries)}
+      ${r.others.length ? `<div class="t" style="margin-top:10px;font-size:15px">จ่ายอื่น (ส่วนแบ่ง X-ray)</div>${payRows(r.others)}` : ''}
+      <p class="s" style="margin-top:6px">DF หมอดูที่เมนู DF · ลงสลิปเงินเดือนใหม่: ส่งรูปสลิปให้ Claude หรือบันทึกในเมนูเจ้าหนี้</p></div>
+    <details class="card" open><summary class="t" style="cursor:pointer">โอที / เบี้ยขยัน / ทำงานวันหยุด</summary>
+      <p class="s">โอที ${baht(r.rates.ot || 0)}/ชม. · วันหยุด ${baht(r.rates.holiday || 0)}/วัน · เบี้ยขยันเต็ม ${baht(r.rates.allowance || 0)}${r.clockStart ? ' · เริ่มนับขาด/สาย ' + esc(r.clockStart) : ''}</p>${people}</details>
+    <details class="card"><summary class="t" style="cursor:pointer">ประวัติเข้าทำงาน</summary>${att}
+      <div class="t" style="margin-top:10px;font-size:15px">คำขอลา / โอที เดือนนี้</div>${reqs}</details>`;
+  document.getElementById('prM').onchange = e => viewPayroll(e.target.value);
+}
+
 async function viewDF(note, month) {
   month = month || todayISO().slice(0, 7);
   app.innerHTML = '<div class="center">กำลังคำนวณ DF…</div>';
