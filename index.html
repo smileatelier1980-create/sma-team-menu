@@ -87,7 +87,7 @@ const fmtDate = v => { if (!v) return ''; const d = new Date(v); return isNaN(d)
 
 // ข้อมูลที่เปิดดูบ่อย: โชว์ของเดิมที่จำไว้ทันที แล้วดึงของใหม่ตามหลัง (ถ้าต่างและยังไม่ได้พิมพ์อะไร → วาดหน้าใหม่)
 const READ_ACTIONS = new Set(['stockTree', 'dailyToday', 'apptDay', 'checklist', 'buyHome', 'stock', 'caseList', 'labs', 'myTasks', 'today', 'myRequests', 'pending',
-  'teamList', 'payHome', 'payrollHome', 'myCases', 'caseInfo', 'leaveHome', 'capHome', 'dfHome', 'reserved', 'myLabSteps', 'patients', 'tasksHome', 'patientInfo']);
+  'teamList', 'payHome', 'payrollHome', 'slipInList', 'myCases', 'caseInfo', 'leaveHome', 'capHome', 'dfHome', 'reserved', 'myLabSteps', 'patients', 'tasksHome', 'patientInfo']);
 const memGet = k => { try { return JSON.parse(localStorage.getItem('sma_c_' + k) || 'null'); } catch (e) { return null; } };
 const memSet = (k, v) => { try { localStorage.setItem('sma_c_' + k, JSON.stringify(v)); } catch (e) {} };
 const memClear = () => { try { Object.keys(localStorage).filter(k => k.startsWith('sma_c_')).forEach(k => localStorage.removeItem(k)); } catch (e) {} };
@@ -2081,6 +2081,22 @@ const errV2 = r => r.msg || ({ pay_mismatch: 'ยอดจ่ายไม่เ�
   doctor_leave: 'หมอลา/ไม่ได้เข้าวันนี้', not_doctor: 'เมนูนี้สำหรับหมอ', already_done: 'บันทึกไปแล้ว', bad_kind: 'เลือกประเภทเอกสาร' }[r.error]) || errMore(r);
 
 // ---------- สรุปรายวัน (แบบบิล) ----------
+// v39 สลิปจาก LINE หน้าบ้านที่ระบบจับคู่เองไม่ได้ (หมอเท่านั้น)
+async function loadSlipIn() {
+  const host = document.getElementById('slipIn'); if (!host) return;
+  const r = await call('slipInList');
+  if (!r.ok || !r.items.length) { host.innerHTML = r.ok && r.autoDone ? `<p class="s" style="margin:0 4px 8px">สลิปจาก LINE หน้าบ้าน 3 วันนี้ ระบบแนบให้เอง ${r.autoDone} ใบ</p>` : ''; return; }
+  host.innerHTML = `<div class="card"><div class="t">📩 สลิปจาก LINE หน้าบ้าน รอหมอดู (${r.items.length})</div>
+    ${r.items.map(x => `<div class="row" style="flex-wrap:wrap;align-items:flex-start"><div class="grow">
+      <div class="t" style="font-size:15px">${baht(x.amount)} บาท · ${esc(x.date || x.at)} ${esc(x.time || '')}</div>
+      <div class="s">${esc(x.from || 'ไม่ทราบชื่อผู้โอน')}${x.ref ? ' · ' + esc(x.ref) : ''} · ${x.status === 'หลายรายการ' ? 'ยอดตรงหลายรายการ' : x.status === 'ส่งซ้ำ' ? 'คนไข้ส่งสลิปเดิมซ้ำ' : x.status === 'ตรวจบัญชี' ? '⚠️ ไม่เห็นชื่อบัญชีคลินิกในสลิป' : 'ยังไม่มีรายการยอดนี้'}${x.url ? ` · <a href="${esc(x.url)}" target="_blank" rel="noopener">ดูสลิป</a>` : ''}</div>
+      ${x.options.length ? `<select data-sk="${esc(x.id)}" style="margin-top:6px"><option value="">แนบกับรายการ…</option>${x.options.map(o => `<option value="${esc(o.key)}">${esc(o.date)} · ${esc(o.dn)} ${esc(o.nick)} · โอน ${baht(o.transfer)}${o.transfer !== x.amount ? ' (ยอดไม่ตรง)' : ''}</option>`).join('')}</select>` : ''}
+      </div><button class="btn ghost" data-sx="${esc(x.id)}">ไม่เกี่ยว</button></div>`).join('')}
+    <p class="s">ระบบจะลองจับคู่ให้อีกเมื่อเคาน์เตอร์ลงรายการยอดเดียวกัน</p></div>`;
+  host.querySelectorAll('[data-sk]').forEach(s => s.onchange = async () => { if (!s.value) return; const res = await call('slipInMatch', { id: s.dataset.sk, key: s.value }); if (!res.ok) return flash('แนบไม่ได้: ' + res.error); viewDaily2('แนบสลิปแล้ว'); });
+  host.querySelectorAll('[data-sx]').forEach(b => b.onclick = async () => { const res = await call('slipInMatch', { id: b.dataset.sx, dismiss: true }); if (!res.ok) return flash('ไม่สำเร็จ: ' + res.error); loadSlipIn(); });
+}
+
 async function viewDaily2(note) {
   app.innerHTML = '<div class="center">กำลังโหลด…</div>';
   const r = await call('dailyToday');
@@ -2101,6 +2117,7 @@ async function viewDaily2(note) {
         ${i ? '<button type="button" class="btn ghost small iDel">ลบรายการ</button>' : ''}</div></div>`;
   app.innerHTML = `
     <div id="m">${note ? `<div class="msg ok">${esc(note)}</div>` : ''}</div>
+    ${owner ? '<div id="slipIn"></div>' : ''}
     ${owner && r.cashPending?.length ? `<div class="card"><div class="t">💵 เงินสดรอหมอรับ</div>${r.cashPending.map(c => `<form class="move" data-rc="${esc(c.date)}"><div class="grow"><label>${esc(c.date)} · ${esc(c.by)} นับได้ ${baht(c.counted)} บาท · หมอนับได้</label>
       <input type="number" inputmode="decimal" value="${c.counted}"></div><button class="btn small" type="submit">รับเงินแล้ว</button></form>`).join('')}</div>` : ''}
     ${owner ? `<div class="card"><div class="t">สรุปของหมอ</div>
@@ -2162,6 +2179,7 @@ async function viewDaily2(note) {
   [pCash, pTr, pCard].forEach(i => i.oninput = upd);
   app.querySelectorAll('[data-all]').forEach(b => b.onclick = () => { const t = totalOf(); pCash.value = b.dataset.all === 'cash' ? t : ''; pTr.value = b.dataset.all === 'transfer' ? t : ''; pCard.value = b.dataset.all === 'card' ? t : ''; upd(); });
   dDn.onchange = () => { const p = r.patients.find(x => x.dn === dDn.value.trim()); if (p) { dNick.value = p.nick; items.querySelectorAll('.iDoc').forEach(s => { if (!s.value && p.doctor) s.value = p.doctor; }); } };
+  if (owner) loadSlipIn();
   document.getElementById('bf2').onsubmit = async ev => {
     ev.preventDefault();
     const b = ev.target.querySelector('button[type=submit]'); b.disabled = true; b.textContent = 'กำลังบันทึก…';
@@ -2173,7 +2191,7 @@ async function viewDaily2(note) {
     if (!res.ok && res.error === 'dup_slip' && confirm(res.msg + '\nยืนยันว่าใช้สลิปนี้ซ้ำ?')) res = await send({ allowDupSlip: true });
     b.disabled = false; b.textContent = 'บันทึก';
     if (!res.ok) return flash(errV2(res));
-    viewDaily2('บันทึกแล้ว' + (res.warn ? ' · ⚠️ ' + res.warn : ''));
+    viewDaily2('บันทึกแล้ว' + (res.autoSlip ? ' · แนบสลิปที่คนไข้ส่งใน LINE ให้แล้ว' : '') + (res.warn ? ' · ⚠️ ' + res.warn : ''));
   };
   app.querySelectorAll('[data-rc]').forEach(f => f.onsubmit = async ev => { ev.preventDefault();
     const res = await call('cashReceive', { date: f.dataset.rc, counted: f.querySelector('input').value });
