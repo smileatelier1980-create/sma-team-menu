@@ -257,6 +257,14 @@ function route(refresh) {
   if (me && me.tabs && !me.tabs.includes(page) && page !== 'patient') page = me.tabs[0];
   tabs.querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', b.dataset.tab === page));
   ({tasks: viewTasks, stock: viewStock, team: viewTeam, cases: viewCases2, lab: viewLab, buy: viewBuy, daily: () => viewDaily2(), checklist: viewChecklist, appt: () => viewAppt(), cap: () => viewCapture(), pay: () => viewPay(), df: () => viewDF()}[page] || soon)(page);
+  if (page === 'appt' || page === 'cases') bgCalSync(page);
+}
+// v34.1 ดึงปฏิทินแยกเบื้องหลัง (ไม่ให้หน้าเมนูรอ) · มีนัดเปลี่ยน → โหลดหน้าใหม่เงียบ ๆ
+let lastBgSync = 0;
+function bgCalSync(page) {
+  if (Date.now() - lastBgSync < 45000) return;
+  lastBgSync = Date.now();
+  apiNet('calSync').then(r => { if (r && r.ok && r.changed) { memClear(); if ((location.hash.slice(1) || 'tasks') === page && !dirty) route(true); } }).catch(() => {});
 }
 
 // ===== ทีมงาน: ลงเวลา / ขอโอที / ลา =====
