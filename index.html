@@ -1077,6 +1077,52 @@ async function photosOf(input) {
 }
 
 // ---------- เช็กลิสต์ ----------
+// v40.3 ติ๊กหลายรายการแล้วบันทึกครั้งเดียว (เหมือนหน้าเคส) ใช้กับ งานค้าง · ต้องซื้อ · สถานะนัด
+const BATCH = { items: [] };
+function batchInit(onDone) {
+  BATCH.items = [];
+  const bar = document.createElement('div');
+  bar.id = 'batchBar'; bar.hidden = true;
+  bar.style.cssText = 'position:fixed;left:0;right:0;bottom:0;z-index:3;background:var(--card);border-top:1px solid var(--border);padding:10px 16px calc(10px + env(safe-area-inset-bottom))';
+  bar.innerHTML = '<div class="s" style="text-align:center;margin-bottom:6px">ติ๊กได้หลายรายการ แล้วกดบันทึกครั้งเดียว</div><div style="display:flex;gap:8px"><button class="btn ghost" type="button" data-bclr style="flex:1">ล้าง</button><button class="btn" type="button" data-bsave style="flex:2">บันทึก</button></div>';
+  app.appendChild(bar);
+  const pad = document.createElement('div'); pad.style.height = '90px'; app.appendChild(pad);
+  bar.querySelector('[data-bclr]').onclick = () => { BATCH.items.slice().forEach(x => batchUndo(x)); };
+  bar.querySelector('[data-bsave]').onclick = async ev => {
+    const b = ev.target; if (!BATCH.items.length) return;
+    b.disabled = true; const all = BATCH.items.slice(); let done = 0; const errs = [];
+    b.textContent = 'กำลังบันทึก 0/' + all.length;
+    const queue = all.slice();
+    const worker = async () => { while (queue.length) { const x = queue.shift(); const r = await x.fn().catch(e => ({ ok: false, error: e.message })); done++; b.textContent = 'กำลังบันทึก ' + done + '/' + all.length; if (!r || !r.ok) errs.push(x.label + ': ' + ((r && (r.msg || r.error)) || 'ไม่สำเร็จ')); } };
+    await Promise.all([worker(), worker(), worker()]);
+    dirty = false; BATCH.items = [];
+    onDone((all.length - errs.length) + ' รายการบันทึกแล้ว' + (errs.length ? ' · ไม่สำเร็จ ' + errs.length + ': ' + errs.join(' / ') : ''), !errs.length);
+  };
+}
+function batchAdd(rowEl, label, fn) {
+  if (!rowEl || rowEl.dataset.bq) return;
+  const x = { rowEl, label, fn };
+  BATCH.items.push(x); rowEl.dataset.bq = '1';
+  rowEl.querySelectorAll('button').forEach(b => { b.dataset.bdis = b.disabled ? '1' : ''; b.disabled = true; });
+  rowEl.style.background = '#eef7f1';
+  const tag = document.createElement('div'); tag.className = 's bq'; tag.style.cssText = 'width:100%;color:var(--ok,#1a7f4b);margin-top:4px';
+  tag.innerHTML = '✓ ' + esc(label) + ' (ยังไม่บันทึก) · <a href="#" style="color:inherit">ยกเลิก</a>';
+  tag.querySelector('a').onclick = e => { e.preventDefault(); batchUndo(x); };
+  rowEl.appendChild(tag); x.tag = tag;
+  batchCount();
+}
+function batchUndo(x) {
+  BATCH.items = BATCH.items.filter(y => y !== x);
+  delete x.rowEl.dataset.bq; x.rowEl.style.background = ''; if (x.tag) x.tag.remove();
+  x.rowEl.querySelectorAll('button').forEach(b => { b.disabled = b.dataset.bdis === '1'; });
+  batchCount();
+}
+function batchCount() {
+  const bar = document.getElementById('batchBar'); if (!bar) return;
+  bar.hidden = !BATCH.items.length; dirty = BATCH.items.length > 0;
+  bar.querySelector('[data-bsave]').textContent = 'บันทึก ' + BATCH.items.length + ' รายการ';
+}
+
 async function viewChecklist(note) {
   app.innerHTML = '<div class="center">กำลังเช็ก…</div>';
   const r = await call('checklist');
@@ -1103,6 +1149,7 @@ async function viewChecklist(note) {
     ${others.length ? `<details class="card"><summary class="t" style="cursor:pointer">เรื่องของคนอื่นในทีม (${others.length})</summary>${grouped(others)}</details>` : ''}
     <a class="btn ghost" style="display:flex;align-items:center;justify-content:center;text-decoration:none" href="${SOP_URL}" target="_blank" rel="noopener">เปิด SOP คลินิก (Google Sheet)</a>`;
   app.querySelectorAll('[data-go]').forEach(b => b.onclick = () => { location.hash = b.dataset.go; });
+  batchInit(m => viewChecklist(m));
   app.querySelectorAll('[data-ca]').forEach(b => b.onclick = async () => {
     const x = it[+b.closest('[data-ci]').dataset.ci], a = b.dataset.ca, body = {key: x.key, act: a, code: x.code, exp: x.exp};
     if (a === 'snooze') body.days = +b.dataset.days;
@@ -1113,7 +1160,8 @@ async function viewChecklist(note) {
     }
     if (a === 'editExp') { const ne = prompt('วันหมดอายุที่ถูกต้อง (ปี-เดือน-วัน เช่น 2027-03-31)', x.exp || ''); if (!ne) return; body.newExp = ne.trim(); }
     if (a === 'return') { const n = prompt('หมายเหตุ เช่น ส่งคืนบริษัทไหน (เว้นว่างได้)', ''); if (n === null) return; body.note = n; }
-    b.disabled = true;
+    const lbl = { discard: 'ทิ้ง ' + (body.qty || ''), ack: 'รับทราบ', return: 'ส่งคืน', editExp: 'แก้วันหมดอายุ ' + (body.newExp || ''), snooze: 'เลื่อน ' + (body.days || '') + ' วัน' }[a] || b.textContent.trim();
+    return batchAdd(b.closest('[data-ci]'), lbl, () => call('checkAction', body));
     const res = await call('checkAction', body);
     if (!res.ok) { b.disabled = false; return flash(res.error === 'bad_date' ? 'วันที่ต้องเป็นแบบ 2027-03-31' : errMore(res)); }
     viewChecklist({discard: 'บันทึกทิ้งแล้ว ตัดสต็อกให้แล้ว', ack: 'รับทราบแล้ว · จะเตือนอีกครั้งใน 30 วัน', return: 'บันทึกแล้ว · จะเตือนให้ตามบริษัทใน 14 วัน', editExp: 'แก้วันหมดอายุแล้ว', snooze: 'เลื่อนแล้ว ' + body.days + ' วัน'}[a]);
@@ -1191,8 +1239,9 @@ async function viewBuy(note) {
     <div class="list">${r.mine.length ? r.mine.map(billRow).join('') : '<div class="row s">ยังไม่มีบิล</div>'}</div>`;
 
   const tbReload = m => viewBuy().then(() => m && flash(m, true));
-  app.querySelectorAll('[data-tbdone]').forEach(b => b.onclick = async () => { b.disabled = true; const x = await call('buyListDone', {id: b.dataset.tbdone}); if (!x.ok) { b.disabled = false; return flash(errMore(x)); } tbReload('ติ๊กซื้อแล้ว · ถ้าซื้อเข้าสต็อก กด "รับเข้า" ที่แท็บสต็อกด้วย'); });
-  app.querySelectorAll('[data-tbdel]').forEach(b => b.onclick = async () => { if (!confirm('เอาออกจากรายการต้องซื้อ?')) return; const x = await call('buyListDone', {id: b.dataset.tbdel, status: 'ยกเลิก'}); if (!x.ok) return flash(errMore(x)); tbReload('เอาออกแล้ว'); });
+  batchInit(m => tbReload(m + ' · ของที่ซื้อเข้าสต็อก กด "รับเข้า" ที่แท็บสต็อกด้วย'));
+  app.querySelectorAll('[data-tbdone]').forEach(b => b.onclick = () => batchAdd(b.closest('.row'), 'ซื้อแล้ว', () => call('buyListDone', {id: b.dataset.tbdone})));
+  app.querySelectorAll('[data-tbdel]').forEach(b => b.onclick = () => batchAdd(b.closest('.row'), 'เอาออกจากลิสต์', () => call('buyListDone', {id: b.dataset.tbdel, status: 'ยกเลิก'})));
   app.querySelectorAll('[data-tbsug]').forEach(b => b.onclick = async () => { b.disabled = true; const x = await call('buyListAdd', {code: b.dataset.tbsug, src: b.dataset.why}); if (!x.ok) { b.disabled = false; return flash(errMore(x)); } tbReload('ใส่ลิสต์แล้ว'); });
   document.getElementById('tbAdd').onclick = async () => {
     const name = tbName.value.trim(); if (!name) return flash('ใส่ชื่อของก่อน');
@@ -1974,14 +2023,10 @@ async function viewAppt(note) {
     }
     apptDate = afDate.value; await viewAppt('ลงนัดแล้ว และลงปฏิทินให้แล้ว' + (res.warn ? ' · หมายเหตุ: ' + res.warn : ''));
   };
+  batchInit(m => viewAppt(m));
   app.querySelectorAll('[data-ap]').forEach(cardEl => {
     const id = cardEl.dataset.ap, box = cardEl.querySelector('.apBox'), a = r.list.find(x => x.id === id);
-    cardEl.querySelectorAll('[data-st]').forEach(b => b.onclick = async () => {
-      b.disabled = true;
-      const res = await call('apptStatus', {id, status: b.dataset.st});
-      if (!res.ok) { b.disabled = false; return flash(errMore(res)); }
-      viewAppt('บันทึกสถานะ ' + b.dataset.st + ' แล้ว');
-    });
+    cardEl.querySelectorAll('[data-st]').forEach(b => b.onclick = () => batchAdd(cardEl, (a ? a.nick + ' ' : '') + b.dataset.st, () => call('apptStatus', {id, status: b.dataset.st})));
     const mv = cardEl.querySelector('[data-mv]');
     if (mv) mv.onclick = () => {
       box.innerHTML = `<form><div style="display:grid;grid-template-columns:1fr 1fr;gap:0 8px">
@@ -2320,7 +2365,9 @@ function capFields(kind, d, s, L) {
     <div class="s">ผู้รับ: ${esc(d.to || d.vendor || '-')}</div>
     ${L.owner ? `<label>จ่ายเอกสารใบไหน</label>${(s.pay || []).map((g, i) => `<label style="display:flex;gap:8px;align-items:center;color:var(--ink)"><input type="radio" name="pg_${esc(d._id)}" class="fPay" value="${esc(g.ids.join(','))}" ${i === 0 ? 'checked' : ''} style="width:auto;height:auto"> ${esc(g.label)}</label>`).join('') || '<div class="s">ไม่เจอเอกสารค้างจ่ายยอดนี้ · เลือกประเภท "รายจ่ายจ่ายแล้ว" แทนได้</div>'}` : '<div class="s">หมอเป็นคนยืนยันการจ่ายเจ้าหนี้</div>'}`;
   if (kind === 'invoice' || kind === 'billing') return `<div style="display:grid;grid-template-columns:1fr 1fr;gap:0 8px">
-      <div><label>ผู้ขาย/แล็บ</label><select class="fVendor"${yel(d, 'vendor')}><option value="">เลือก</option>${opts(L.vendors.map(v => v.name), d.vendor)}</select></div>
+      <div><label>ผู้ขาย/แล็บ/บริษัท</label><input class="fVendor" list="capVendors" placeholder="เลือก หรือพิมพ์ชื่อใหม่" value="${esc(d.vendor || '')}"${yel(d, 'vendor')}>
+        <datalist id="capVendors">${L.vendors.map(v => `<option value="${esc(v.name)}">`).join('')}</datalist>
+        <div class="s" style="font-size:11px">ไม่มีในรายการ พิมพ์ชื่อบริษัทได้เลย ระบบเพิ่มให้</div></div>
       <div><label>เลขที่</label><input class="fNo" value="${esc(d.docNo || '')}"${yel(d, 'docNo')}></div>
       <div><label>วันที่เอกสาร/ส่งงาน</label><input class="fDate" type="date" value="${esc(d.date || '')}"${yel(d, 'date')}></div>
       <div><label>ครบกำหนดจ่าย</label><input class="fDue" type="date" value="${esc(d.due || '')}"></div>
