@@ -1272,8 +1272,10 @@ async function viewBuy(note) {
     const btn = document.getElementById('bfBtn'); btn.disabled = true; btn.textContent = 'กำลังส่ง…';
     let photos = [];
     try { photos = await photosOf(document.getElementById('bfPhotos')); } catch (e) { btn.disabled = false; sync(); return flash(e.message); }
-    const res = await call('buyCreate', {kind, items: bfItems.value, amount: amt.value, vendor: bfVendor.value, cat: bfCat.value, pay: bfPay.value,
-      photos, noReceipt: bfNoRc.checked, code: bfCode.value, qty: bfQty.value, equip: bfEquip.value, note: bfNote.value});
+    const bbody = {kind, items: bfItems.value, amount: amt.value, vendor: bfVendor.value, cat: bfCat.value, pay: bfPay.value,
+      photos, noReceipt: bfNoRc.checked, code: bfCode.value, qty: bfQty.value, equip: bfEquip.value, note: bfNote.value};
+    let res = await call('buyCreate', bbody);
+    if (!res.ok && res.error === 'dup_bill' && confirm('⚠️ ' + res.msg)) res = await call('buyCreate', {...bbody, allowDupBill: true});
     if (!res.ok) { btn.disabled = false; sync(); return flash(errMore(res)); }
     await viewBuy(); flash(res.needApprove ? 'ส่งคำขอให้หมออนุมัติแล้ว' : 'บันทึกบิลแล้ว', true);
   };
@@ -1918,6 +1920,145 @@ async function viewCase2(id, msg) {
 
 // ---------- นัดหมาย (ลงปฏิทิน Workspace) ----------
 let apptDate = null;
+// ---------- v42 การมาวันนี้: ทุกอย่างของคนไข้ 1 นัดในหน้าเดียว · ติ๊กแล้วบันทึกครั้งเดียว ----------
+async function viewVisit(id, note) {
+  app.innerHTML = '<div class="center">กำลังเปิด…</div>';
+  const r = await call('visitInfo', { id });
+  if (!r.ok) return showError(r.error === 'no_permission' ? 'นัดนี้ไม่ใช่ของหมอ' : 'เปิดไม่ได้: ' + r.error);
+  const a = r.appt, M = r.money;
+  const S = { arrival: '', reason: '', steps: {}, prices: {}, payStatus: '', plan: 'none' };
+  const times = []; for (let m = toM(r.open[0] || '09:00'); m <= toM(r.open[1] || '19:00') - 15; m += 15) times.push(String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0'));
+  const nextStep = (r.cases.find(c => c.inAppt) || r.cases[0] || {}).steps?.[0];
+  const sec = (n, t, body) => `<div class="card"><div class="t">${n}. ${t}</div>${body}</div>`;
+  const chk = (attrs, label, sub) => `<label style="display:flex;gap:8px;align-items:flex-start;padding:6px 0;border-bottom:1px solid var(--line);color:var(--ink)"><input type="checkbox" ${attrs} style="width:20px;height:20px;margin-top:2px"><span>${label}${sub ? `<br><span class="s" style="font-size:12px">${sub}</span>` : ''}</span></label>`;
+  // 1 เตรียม
+  const prep = [
+    ...r.labs.map(l => `<div class="s ${l.ready ? '' : 'bad'}">${l.ready ? '✓' : '⏳'} แล็บ ${esc(l.work)} · ${esc(l.lab)} · ${esc(l.status)}</div>`),
+    ...r.reserves.map(x => `<div class="s ${x.status === 'รอของ' ? 'bad' : ''}">${x.status === 'รอของ' ? '⏳' : '✓'} ของจอง ${esc(x.item)} ×${esc(x.qty)} · ${esc(x.status)}</div>`),
+    !a.dn ? '<div class="s bad">ยังไม่มี DN</div>' : '',
+    r.nextAppt ? `<div class="s">มีนัดครั้งหน้าแล้ว ${esc(r.nextAppt.date)} ${esc(r.nextAppt.start)} · ${esc(r.nextAppt.work)}</div>` : ''
+  ].filter(Boolean).join('') || '<div class="s">✓ ไม่มีงานแล็บหรือของที่ต้องรอ</div>';
+  // 3 งานวันนี้
+  const work = r.cases.length ? r.cases.map(c => `<div style="margin-top:6px"><div class="t" style="font-size:15px">${esc(c.work)} <span class="s">${esc(c.id)} · ${esc(c.status)}</span></div>
+      ${c.steps.length ? c.steps.map(s => s.surg
+        ? `<div class="row s" style="padding:6px 0">• ${esc(s.name)} <button type="button" class="btn ghost small" data-opencase="${esc(c.id)}">บันทึกของที่ใช้ในหน้าเคส</button></div>`
+        : chk(`data-step="${esc(s.id)}" data-case="${esc(c.id)}" data-sname="${esc(s.name)}"`, esc(s.name) + ' เสร็จวันนี้', s.wait ? 'รอ ' + esc(s.wait) : '') + `<input class="stNote" data-for="${esc(s.id)}" placeholder="หมายเหตุ / ซี่ (ถ้ามี)" hidden style="margin:4px 0 6px">`).join('') : '<div class="s">ไม่มีขั้นที่รอ</div>'}</div>`).join('')
+    : '<div class="s">คนไข้ยังไม่มีเคส (ลงรายรับได้ตามปกติ)</div>';
+  // 4 จ่ายเงิน
+  const itemRow = (it = {}) => `<div class="vItem" style="display:grid;grid-template-columns:2fr 1.3fr 1fr;gap:4px 6px;margin:6px 0;border-top:1px solid var(--line);padding-top:6px">
+      <input class="iTreat" placeholder="งาน" value="${esc(it.treat || '')}"><select class="iDoc">${opts(r.doctors, it.doctor || a.doctor)}</select><input class="iAmt" type="number" inputmode="decimal" placeholder="ยอด" value="${it.amount || ''}">
+      <select class="iType">${opts(r.itemTypes, it.type || 'รักษา')}</select><select class="iCase"><option value="">ไม่ผูกเคส</option>${r.cases.map(c => `<option value="${esc(c.id)}" ${c.id === it.caseId ? 'selected' : ''}>${esc(c.work)}</option>`).join('')}</select><span></span></div>`;
+  const firstCase = r.cases.find(c => c.inAppt) || r.cases[0];
+  const pay = !M ? '' : sec(4, 'จ่ายเงิน', `
+      ${r.paidToday.length ? `<div class="s"><b>ลงรายรับไว้แล้ววันนี้:</b> ${r.paidToday.map(p => `${esc(p.treat)} ${baht(p.total)}${p.wait ? ' (รอสลิป)' : ''}`).join(' · ')}</div>` : ''}
+      ${r.cases.map(c => `<div class="row s" style="padding:4px 0"><span class="grow">${esc(c.work)}: ราคาแผน</span><input class="vPrice" data-case="${esc(c.id)}" type="number" inputmode="decimal" value="${c.price || ''}" placeholder="ใส่ราคา" style="width:110px">
+        <span style="min-width:110px;text-align:right">${c.price ? 'จ่ายแล้ว ' + baht(c.paid) + '<br><b>' + (c.balance > 0 ? 'ค้าง ' + baht(c.balance) : 'ครบแล้ว') + '</b>' : 'จ่ายแล้ว ' + baht(c.paid || 0)}</span></div>`).join('')}
+      <div id="vItems">${itemRow({ treat: a.work, caseId: firstCase?.id })}</div>
+      <button type="button" class="btn ghost small" id="vAddItem">+ เพิ่มรายการ</button>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:0 8px;margin-top:8px">
+        <div><label>เงินสด</label><input id="vCash" type="number" inputmode="decimal"></div>
+        <div><label>โอน</label><input id="vTr" type="number" inputmode="decimal"></div>
+        <div><label>บัตร</label><input id="vCard" type="number" inputmode="decimal"></div></div>
+      <div class="s" id="vSum"></div>
+      <div id="vSlipBox" hidden><label>สลิปโอน (ถ้ามี)</label><input id="vSlip" type="file" accept="image/*" multiple>
+        <div class="s">${r.slips.length ? '📩 มีสลิปจาก LINE รอจับคู่: ' + r.slips.map(s => baht(s.amount) + ' ' + esc(s.from || '')).join(' · ') + ' · ยอดตรงระบบแนบให้เอง' : 'ไม่มีสลิปตอนนี้ก็บันทึกได้ คนไข้ส่งใน LINE ทีหลังระบบแนบให้เอง'}</div></div>
+      <div class="cats" style="margin-top:8px"><button type="button" data-ps="จ่ายครบแล้ว" aria-pressed="false">จ่ายครบแล้ว (ไม่มียอดวันนี้)</button><button type="button" data-ps="ไม่เก็บครั้งนี้" aria-pressed="false">ไม่เก็บเงินครั้งนี้</button></div>`);
+  // 5 นัดต่อ
+  const plan = sec(M ? 5 : 4, 'นัดครั้งต่อไป / เลื่อน', `
+      <div class="cats">${[['none', r.nextAppt ? 'มีนัดแล้ว ไม่ต้องลง' : 'ยังไม่ลง'], ['next', 'ลงนัดครั้งหน้า'], ['move', 'เลื่อนนัดนี้'], ['pp', 'ขอเลื่อน ยังไม่ได้วัน']].map(([k, t]) => `<button type="button" data-plan="${k}" aria-pressed="${k === 'none'}">${t}</button>`).join('')}</div>
+      <div id="vNext" hidden><div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:0 8px">
+        <div><label>วัน</label><input id="vnDate" type="date"></div>
+        <div><label>เวลา</label><select id="vnTime">${times.map(t => `<option ${t === a.start ? 'selected' : ''}>${t}</option>`).join('')}</select></div>
+        <div><label>นาน (นาที)</label><select id="vnDur">${[15, 30, 45, 60, 90, 120, 180].map(n => `<option ${n === 30 ? 'selected' : ''}>${n}</option>`).join('')}</select></div></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:0 8px"><div><label>หมอ</label><select id="vnDoc">${opts(r.doctors, a.doctor)}</select></div><div><label>ห้อง</label><select id="vnUnit">${opts(r.units, a.unit)}</select></div></div>
+        <label>งานที่จะทำ</label><input id="vnWork" value="${esc(nextStep ? nextStep.name : a.work)}">
+        ${r.cases.length ? `<div class="s">ผูกเคส: ${r.cases.map(c => `<label style="display:inline-flex;gap:4px;align-items:center;margin-right:10px;color:var(--ink)"><input type="checkbox" class="vnCase" value="${esc(c.id)}" ${c.inAppt || c === firstCase ? 'checked' : ''} style="width:auto;height:auto">${esc(c.work)}</label>`).join('')}</div>` : ''}</div>
+      <div id="vPp" hidden><label>เหตุผล</label><input id="vpWhy" placeholder="เช่น คนไข้ติดธุระ"><label>วันโทรตาม</label><input id="vpFollow" type="date"></div>`);
+  app.innerHTML = `<div id="m">${note ? `<div class="msg ${note.ok === false ? 'err' : 'ok'}">${esc(note.text || note)}</div>` : ''}</div>
+    <button class="btn ghost small" id="vBack">‹ กลับไปหน้านัด</button>
+    <div class="card"><div class="t">${esc(a.start)}–${esc(a.end)} · ${esc(a.dn ? a.dn + ' ' : '')}${esc(a.nick)}</div>
+      <div class="s">${esc(a.work)}${a.tooth ? ' ' + esc(a.tooth) : ''} · ${esc(a.doctor)} · ${esc(a.unit)} · สถานะ <b>${esc(a.status)}</b>${r.payStatus ? ' · ' + esc(r.payStatus) : ''}</div>
+      ${a.note ? `<div class="s">${esc(a.note)}</div>` : ''}</div>
+    ${sec(1, 'เตรียมก่อนคนไข้มา', prep)}
+    ${sec(2, 'มาถึง', `<div class="cats">${['มาแล้ว', 'ไม่มา', 'ยกเลิก', ...(a.status !== 'นัดแล้ว' ? ['นัดแล้ว'] : [])].map(s => `<button type="button" data-arr="${s}" aria-pressed="${s === a.status}">${s === 'นัดแล้ว' ? 'ย้อนเป็นนัดแล้ว' : s}</button>`).join('')}</div>
+      <input id="vReason" placeholder="เหตุผล (ไม่มา/ยกเลิก)" hidden style="margin-top:6px">`)}
+    ${sec(3, 'งานที่ทำวันนี้', work)}
+    ${pay}${plan}
+    <div style="height:96px"></div>
+    <div id="vBar" style="position:fixed;left:0;right:0;bottom:0;z-index:3;background:var(--card);border-top:1px solid var(--border);padding:10px 16px calc(10px + env(safe-area-inset-bottom))">
+      <div class="s" id="vHint" style="text-align:center;margin-bottom:6px">ติ๊กได้ทุกส่วน แล้วกดบันทึกครั้งเดียว</div>
+      <button class="btn" id="vSave" type="button" style="width:100%" disabled>บันทึกการมาวันนี้</button></div>`;
+  const $ = s => app.querySelector(s), $$ = s => [...app.querySelectorAll(s)];
+  const changes = () => {
+    const out = [];
+    if (S.arrival && S.arrival !== a.status) out.push('สถานะ ' + S.arrival);
+    const st = $$('[data-step]:checked'); if (st.length) out.push('ขั้นเสร็จ ' + st.length);
+    if (M) {
+      $$('.vPrice').forEach(i => { const c = r.cases.find(x => x.id === i.dataset.case); if (String(i.value || '') !== String(c.price || '')) out.push('ราคาแผน ' + c.work); });
+      const tot = items().reduce((n, x) => n + x.amount, 0); if (tot > 0) out.push('รายรับ ' + baht(tot));
+      else if (S.payStatus) out.push(S.payStatus);
+    }
+    if (S.plan !== 'none') out.push({ next: 'นัดครั้งหน้า', move: 'เลื่อนนัด', pp: 'ขอเลื่อน' }[S.plan]);
+    return out;
+  };
+  const items = () => $$('.vItem').map(el => ({ treat: el.querySelector('.iTreat').value.trim(), doctor: el.querySelector('.iDoc').value, type: el.querySelector('.iType').value,
+    amount: Number(el.querySelector('.iAmt').value) || 0, caseId: el.querySelector('.iCase').value })).filter(x => x.amount > 0);
+  const refresh = () => {
+    const c = changes(); dirty = c.length > 0;
+    $('#vSave').disabled = !c.length; $('#vSave').textContent = c.length ? `บันทึกการมาวันนี้ (${c.length})` : 'บันทึกการมาวันนี้';
+    $('#vHint').textContent = c.length ? c.join(' · ') : 'ติ๊กได้ทุกส่วน แล้วกดบันทึกครั้งเดียว';
+    if (M) { const tot = items().reduce((n, x) => n + x.amount, 0), paid = ['#vCash', '#vTr', '#vCard'].reduce((n, s) => n + (Number($(s).value) || 0), 0);
+      $('#vSum').innerHTML = tot ? `รวมรายการ ${baht(tot)} · จ่าย ${baht(paid)}${Math.abs(tot - paid) > 0.01 ? ' <span class="bad">ยังไม่เท่ากัน</span>' : ' ✓'}` : '';
+      $('#vSlipBox').hidden = !(Number($('#vTr').value) > 0); }
+  };
+  $('#vBack').onclick = () => { if (dirty && !confirm('ยังไม่ได้บันทึก ออกจากหน้านี้?')) return; dirty = false; viewAppt(); };
+  $$('[data-opencase]').forEach(b => b.onclick = () => { if (dirty && !confirm('ยังไม่ได้บันทึก ออกจากหน้านี้?')) return; dirty = false; location.hash = 'cases'; setTimeout(() => viewCase2(b.dataset.opencase), 50); });
+  $$('[data-arr]').forEach(b => b.onclick = () => { S.arrival = b.dataset.arr; $$('[data-arr]').forEach(x => x.setAttribute('aria-pressed', x === b)); $('#vReason').hidden = !['ไม่มา', 'ยกเลิก'].includes(S.arrival); refresh(); });
+  $$('[data-step]').forEach(c => c.onchange = () => { const n = app.querySelector(`.stNote[data-for="${c.dataset.step}"]`); if (n) n.hidden = !c.checked;
+    if (M && c.checked) { const it = $$('.vItem').find(el => !el.querySelector('.iAmt').value && el.querySelector('.iTreat').value === a.work); if (it) { it.querySelector('.iTreat').value = c.dataset.sname; it.querySelector('.iCase').value = c.dataset.case; } }
+    if (!S.arrival && a.status === 'นัดแล้ว') { S.arrival = 'มาแล้ว'; $$('[data-arr]').forEach(x => x.setAttribute('aria-pressed', x.dataset.arr === 'มาแล้ว')); }
+    refresh(); });
+  if (M) {
+    $('#vAddItem').onclick = () => { $('#vItems').insertAdjacentHTML('beforeend', itemRow({ caseId: firstCase?.id })); refresh(); };
+    $$('[data-ps]').forEach(b => b.onclick = () => { S.payStatus = S.payStatus === b.dataset.ps ? '' : b.dataset.ps; $$('[data-ps]').forEach(x => x.setAttribute('aria-pressed', x.dataset.ps === S.payStatus)); refresh(); });
+  }
+  $$('[data-plan]').forEach(b => b.onclick = () => { S.plan = b.dataset.plan; $$('[data-plan]').forEach(x => x.setAttribute('aria-pressed', x === b)); $('#vNext').hidden = !['next', 'move'].includes(S.plan); $('#vPp').hidden = S.plan !== 'pp';
+    $('#vnWork').disabled = S.plan === 'move'; refresh(); });
+  app.addEventListener('input', refresh); app.addEventListener('change', refresh);
+  refresh();
+  $('#vSave').onclick = async ev => {
+    const b = ev.target;
+    const body = { id: a.id };
+    if (S.arrival && S.arrival !== a.status) { body.arrival = { status: S.arrival, reason: $('#vReason').value.trim() }; if (S.arrival === 'ยกเลิก' && !body.arrival.reason) return flash('ยกเลิกนัด ต้องใส่เหตุผล'); }
+    body.steps = $$('[data-step]:checked').map(c => ({ id: c.dataset.step, caseId: c.dataset.case, note: (app.querySelector(`.stNote[data-for="${c.dataset.step}"]`) || {}).value || '' }));
+    if (M) {
+      body.prices = $$('.vPrice').filter(i => { const c = r.cases.find(x => x.id === i.dataset.case); return String(i.value || '') !== String(c.price || ''); }).map(i => ({ caseId: i.dataset.case, price: i.value }));
+      const its = items();
+      if (its.length) {
+        if (its.some(x => !x.treat)) return flash('ใส่ชื่องานทุกรายการที่มียอด');
+        const p = { cash: Number($('#vCash').value) || 0, transfer: Number($('#vTr').value) || 0, card: Number($('#vCard').value) || 0 };
+        const tot = its.reduce((n, x) => n + x.amount, 0);
+        if (Math.abs(p.cash + p.transfer + p.card - tot) > 0.01) return flash('ยอดจ่าย (สด+โอน+บัตร) ต้องเท่ากับยอดรายการ ' + baht(tot));
+        let slips = []; if ($('#vSlip') && $('#vSlip').files.length) { slips = await fileToData($('#vSlip')); if (!slips) return; }
+        body.pay = { items: its, pay: p, slips };
+      } else if (S.payStatus) body.payStatus = S.payStatus;
+    }
+    if (S.plan === 'next' || S.plan === 'move') {
+      const d = $('#vnDate').value; if (!d) return flash('เลือกวันนัด');
+      const x = { date: d, start: $('#vnTime').value, duration: $('#vnDur').value, doctor: $('#vnDoc').value, unit: $('#vnUnit').value };
+      if (S.plan === 'next') body.next = Object.assign(x, { work: $('#vnWork').value.trim() || a.work, caseIds: $$('.vnCase:checked').map(c => c.value) }); else body.move = x;
+    }
+    if (S.plan === 'pp') body.postpone = { reason: $('#vpWhy').value.trim(), followDate: $('#vpFollow').value };
+    b.disabled = true; b.textContent = 'กำลังบันทึก…';
+    let res = await call('visitSave', body);
+    b.disabled = false;
+    if (!res.ok && !(res.done || []).length) { b.textContent = 'บันทึกการมาวันนี้'; return flash('บันทึกไม่ได้: ' + ((res.errors || []).join(' · ') || res.error)); }
+    dirty = false;
+    const msg = (res.done || []).join(' · ') + ((res.errors || []).length ? ' · ยังไม่สำเร็จ: ' + res.errors.join(' · ') : '');
+    viewVisit(a.id, { text: 'บันทึกแล้ว: ' + msg, ok: !(res.errors || []).filter(e => !e.startsWith('⚠️')).length });
+  };
+}
+
 async function viewAppt(note) {
   apptDate = apptDate || todayISO();
   app.innerHTML = '<div class="center">กำลังโหลดนัด…</div>';
@@ -1927,15 +2068,12 @@ async function viewAppt(note) {
   const times = []; for (let m = toM(r.open[0] || '09:00'); m <= toM(r.open[1] || '19:00') - 15; m += 15) times.push(String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0'));
   const works = ['ปรึกษา', 'ตรวจ', 'SC', 'อุดฟัน', 'ถอนฟัน', 'RT', 'พิมพ์ปาก/สแกน', 'ลองงาน', 'ใส่ครอบ', 'ติดวีเนียร์', 'ฝังราก', 'จัดฟัน', 'ติดตามผล'];
   const pill = s => `<span class="pill" style="${s === 'ไม่มา' ? 'background:var(--badbg);color:var(--bad)' : s === 'นัดแล้ว' ? '' : 'background:var(--accent);color:#fff'}">${esc(s)}</span>`;
-  const card = a => `<div class="card labcard" data-ap="${esc(a.id)}"${a.leave ? ' style="border:2px solid var(--bad);background:var(--badbg)"' : ''}>
-      <div style="display:flex;gap:8px;align-items:center"><div class="t grow">${esc(a.start)}–${esc(a.end)} · ${esc(a.dn ? a.dn + ' ' : '')}${esc(a.nick)}</div>${pill(a.status)}</div>
-      <div class="s">${esc(a.work)}${a.tooth ? ' ' + esc(a.tooth) : ''} · ${esc(a.doctor)} · ${esc(a.unit)}${a.caseId ? ' · เคส ' + esc(a.caseId) : ''}</div>
-      ${a.note ? `<div class="s">${esc(a.note)}</div>` : ''}
+  // v42 การ์ดย่อ: กดเพื่อเปิดหน้า "การมาวันนี้" (สถานะ จ่ายเงิน งานที่ทำ นัดต่อ อยู่ในนั้นทั้งหมด)
+  const shown = a => a.payStatus && ['เสร็จ', 'มาแล้ว'].includes(a.status) ? a.payStatus : a.status;
+  const card = a => `<div class="card labcard" data-ap="${esc(a.id)}" style="cursor:pointer${a.leave ? ';border:2px solid var(--bad);background:var(--badbg)' : ''}">
+      <div style="display:flex;gap:8px;align-items:center"><div class="t grow">${esc(a.start)} · ${esc(a.dn ? a.dn + ' ' : '')}${esc(a.nick)}</div>${pill(shown(a))}<span class="s">›</span></div>
+      <div class="s">${esc(a.work)}${a.tooth ? ' ' + esc(a.tooth) : ''} · ${esc(a.doctor)}</div>
       ${a.warn.map(w => `<div class="s bad">${esc(w)}</div>`).join('')}
-      <div class="labact">${a.status === 'นัดแล้ว' ? `<button class="btn small" data-st="มาแล้ว">มาแล้ว</button><button class="btn ghost small" data-st="ไม่มา">ไม่มา</button>` : ''}
-        ${a.status === 'มาแล้ว' ? `<button class="btn small" data-st="เสร็จ">เสร็จ</button>` : ''}
-        ${['นัดแล้ว', 'ไม่มา'].includes(a.status) ? `<button class="btn ghost small" data-mv="1">เลื่อน</button><button class="btn ghost small" data-pp="1">ขอเลื่อน ยังไม่ได้วัน</button><button class="btn ghost small" data-cx="1">ยกเลิก</button>` : ''}
-        ${a.status !== 'นัดแล้ว' ? `<button class="btn ghost small" data-st="นัดแล้ว">ย้อนสถานะ</button>` : ''}</div>
       <div class="apBox"></div></div>`;
   const byUnit = u => r.list.filter(a => a.unit === u);
   app.innerHTML = `
@@ -2023,7 +2161,7 @@ async function viewAppt(note) {
     }
     apptDate = afDate.value; await viewAppt('ลงนัดแล้ว และลงปฏิทินให้แล้ว' + (res.warn ? ' · หมายเหตุ: ' + res.warn : ''));
   };
-  batchInit(m => viewAppt(m));
+  app.querySelectorAll('[data-ap]').forEach(el => el.addEventListener('click', e => { if (e.target.closest('button,a,input,select,textarea,form,.apBox')) return; viewVisit(el.dataset.ap); }));
   app.querySelectorAll('[data-ap]').forEach(cardEl => {
     const id = cardEl.dataset.ap, box = cardEl.querySelector('.apBox'), a = r.list.find(x => x.id === id);
     cardEl.querySelectorAll('[data-st]').forEach(b => b.onclick = () => batchAdd(cardEl, (a ? a.nick + ' ' : '') + b.dataset.st, () => call('apptStatus', {id, status: b.dataset.st})));
@@ -2421,6 +2559,7 @@ function bindCapCards(L) {
       let res = await call('capConfirm', { id: c.id, kind, data });
       if (!res.ok && res.error === 'pay_mismatch' && confirm(res.msg)) res = await call('capConfirm', { id: c.id, kind, data: { ...data, force: true } });
       if (!res.ok && res.error === 'dup_slip' && confirm(res.msg + '\nยืนยันว่าใช้ซ้ำ?')) res = await call('capConfirm', { id: c.id, kind, data: { ...data, allowDup: true } });
+      if (!res.ok && res.error === 'dup_bill' && confirm('⚠️ ' + res.msg)) res = await call('capConfirm', { id: c.id, kind, data: { ...data, allowDupBill: true } });
       b.disabled = false; b.textContent = 'ยืนยัน';
       if (!res.ok) return flash(errV2(res));
       capDrafts = capDrafts.filter(x => x.id !== c.id); el.remove();
