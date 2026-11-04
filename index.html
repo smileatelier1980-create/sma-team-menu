@@ -89,9 +89,9 @@ const fmtDate = v => { if (!v) return ''; const d = new Date(v); return isNaN(d)
 const READ_ACTIONS = new Set(['stockTree', 'dailyToday', 'apptDay', 'checklist', 'buyHome', 'stock', 'caseList', 'labs', 'myTasks', 'today', 'myRequests', 'pending',
   'teamList', 'payHome', 'payrollHome', 'slipInList', 'myCases', 'caseInfo', 'leaveHome', 'capHome', 'dfHome', 'reserved', 'myLabSteps', 'patients', 'tasksHome', 'patientInfo']);
 const memGet = k => { try { return JSON.parse(localStorage.getItem('sma_c_' + k) || 'null'); } catch (e) { return null; } };
-const memSet = (k, v) => { try { localStorage.setItem('sma_c_' + k, JSON.stringify(v)); } catch (e) {} };
+const memSet = (k, v) => { const s = JSON.stringify(v); try { localStorage.setItem('sma_c_' + k, s); } catch (e) { memClear(); try { localStorage.setItem('sma_c_' + k, s); } catch (e2) {} } };
 const memClear = () => { try { Object.keys(localStorage).filter(k => k.startsWith('sma_c_')).forEach(k => localStorage.removeItem(k)); } catch (e) {} };
-let dirty = false;
+let dirty = false, lastWrite = 0;
 document.addEventListener('input', () => { dirty = true; }, true);
 const inFlight = new Map();
 // ปุ่มคัดลอกทางไปโฟลเดอร์รูป (ใช้กับแอป DS file)
@@ -108,11 +108,12 @@ async function api(action, data = {}) {
     const p = apiNet(action, data).finally(() => inFlight.delete(fk));
     inFlight.set(fk, p);
     const r = await p;
-    if (r && r.ok && action !== 'me') memClear();
+    // v45 บันทึกแล้วไม่ล้างของที่จำไว้ทั้งหมด (หน้าอื่นยังเปิดเร็ว แล้วดึงของใหม่ตามหลัง) · 8 วินาทีแรกหลังบันทึก ดึงของใหม่เสมอ
+    if (r && r.ok && action !== 'me') lastWrite = Date.now();
     return r;
   }
   const key = (me ? me.nickname : '') + '|' + action + '|' + JSON.stringify(data);
-  const cached = memGet(key);
+  const cached = Date.now() - lastWrite < 8000 ? null : memGet(key);
   const fresh = apiNet(action, data).then(r => { if (r && r.ok) memSet(key, r); return r; });
   if (!cached) return fresh;
   const hashAt = location.hash;
