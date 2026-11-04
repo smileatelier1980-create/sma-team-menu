@@ -1926,7 +1926,7 @@ async function viewVisit(id, note) {
   const r = await call('visitInfo', { id });
   if (!r.ok) return showError(r.error === 'no_permission' ? 'นัดนี้ไม่ใช่ของหมอ' : 'เปิดไม่ได้: ' + r.error);
   const a = r.appt, M = r.money;
-  const S = { arrival: '', reason: '', steps: {}, prices: {}, payStatus: '', plan: 'none' };
+  const S = { arrival: '', reason: '', steps: {}, prices: {}, payStatus: '', plan: 'none', newCases: [] };
   const times = []; for (let m = toM(r.open[0] || '09:00'); m <= toM(r.open[1] || '19:00') - 15; m += 15) times.push(String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0'));
   const nextStep = (r.cases.find(c => c.inAppt) || r.cases[0] || {}).steps?.[0];
   const sec = (n, t, body) => `<div class="card"><div class="t">${n}. ${t}</div>${body}</div>`;
@@ -1947,12 +1947,18 @@ async function viewVisit(id, note) {
   // 4 จ่ายเงิน
   const itemRow = (it = {}) => `<div class="vItem" style="display:grid;grid-template-columns:2fr 1.3fr 1fr;gap:4px 6px;margin:6px 0;border-top:1px solid var(--line);padding-top:6px">
       <input class="iTreat" placeholder="งาน" value="${esc(it.treat || '')}"><select class="iDoc">${opts(r.doctors, it.doctor || a.doctor)}</select><input class="iAmt" type="number" inputmode="decimal" placeholder="ยอด" value="${it.amount || ''}">
-      <select class="iType">${opts(r.itemTypes, it.type || 'รักษา')}</select><select class="iCase"><option value="">ไม่ผูกเคส</option>${r.cases.map(c => `<option value="${esc(c.id)}" ${c.id === it.caseId ? 'selected' : ''}>${esc(c.work)}</option>`).join('')}</select><span></span></div>`;
+      <select class="iType">${opts(r.itemTypes, it.type || 'รักษา')}</select><select class="iCase"><option value="">ไม่ผูกเคส</option>${r.cases.map(c => `<option value="${esc(c.id)}" ${c.id === it.caseId ? 'selected' : ''}>${esc(c.work)}</option>`).join('')}${S.newCases.map(n => `<option value="${esc(n.key)}" ${n.key === it.caseId ? 'selected' : ''}>คอร์สใหม่: ${esc(n.work)}</option>`).join('')}</select><span></span></div>`;
+  // v44 ปุ่มงาน: งานทั่วไป = ชื่องาน + ยอด · งานคอร์ส = ผูกเคส (ยังไม่มี → เปิดคอร์สใหม่ + ราคาเต็ม)
+  const chips = r.chips || { simple: [], course: [] };
+  const chipBtns = `<div class="s" style="margin-top:6px">งานทั่วไป</div><div class="cats">${chips.simple.map(w => `<button type="button" data-chip="${esc(w)}">${esc(w)}</button>`).join('')}</div>
+      <div class="s" style="margin-top:4px">งานคอร์ส (มีขั้นตอน · หักยอดคงเหลือ)</div><div class="cats">${chips.course.map(w => `<button type="button" data-chip="${esc(w)}" data-course="1">${esc(w)}${r.cases.some(c => c.course === w) ? ' ✓' : ''}</button>`).join('')}</div>
+      <div id="vNewCases"></div>`;
   const firstCase = r.cases.find(c => c.inAppt) || r.cases[0];
   const pay = !M ? '' : sec(4, 'จ่ายเงิน', `
       ${r.paidToday.length ? `<div class="s"><b>ลงรายรับไว้แล้ววันนี้:</b> ${r.paidToday.map(p => `${esc(p.treat)} ${baht(p.total)}${p.wait ? ' (รอสลิป)' : ''}`).join(' · ')}</div>` : ''}
       ${r.cases.map(c => `<div class="row s" style="padding:4px 0"><span class="grow">${esc(c.work)}: ราคาแผน</span><input class="vPrice" data-case="${esc(c.id)}" type="number" inputmode="decimal" value="${c.price || ''}" placeholder="ใส่ราคา" style="width:110px">
         <span style="min-width:110px;text-align:right">${c.price ? 'จ่ายแล้ว ' + baht(c.paid) + '<br><b>' + (c.balance > 0 ? 'ค้าง ' + baht(c.balance) : 'ครบแล้ว') + '</b>' : 'จ่ายแล้ว ' + baht(c.paid || 0)}</span></div>`).join('')}
+      ${chipBtns}
       <div id="vItems">${itemRow({ treat: a.work, caseId: firstCase?.id })}</div>
       <button type="button" class="btn ghost small" id="vAddItem">+ เพิ่มรายการ</button>
       <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:0 8px;margin-top:8px">
@@ -1995,6 +2001,7 @@ async function viewVisit(id, note) {
     const st = $$('[data-step]:checked'); if (st.length) out.push('ขั้นเสร็จ ' + st.length);
     if (M) {
       $$('.vPrice').forEach(i => { const c = r.cases.find(x => x.id === i.dataset.case); if (String(i.value || '') !== String(c.price || '')) out.push('ราคาแผน ' + c.work); });
+      S.newCases.forEach(n => out.push('เปิดคอร์ส ' + n.work));
       const tot = items().reduce((n, x) => n + x.amount, 0); if (tot > 0) out.push('รายรับ ' + baht(tot));
       else if (S.payStatus) out.push(S.payStatus);
     }
@@ -2008,7 +2015,11 @@ async function viewVisit(id, note) {
     $('#vSave').disabled = !c.length; $('#vSave').textContent = c.length ? `บันทึกการมาวันนี้ (${c.length})` : 'บันทึกการมาวันนี้';
     $('#vHint').textContent = c.length ? c.join(' · ') : 'ติ๊กได้ทุกส่วน แล้วกดบันทึกครั้งเดียว';
     if (M) { const tot = items().reduce((n, x) => n + x.amount, 0), paid = ['#vCash', '#vTr', '#vCard'].reduce((n, s) => n + (Number($(s).value) || 0), 0);
-      $('#vSum').innerHTML = tot ? `รวมรายการ ${baht(tot)} · จ่าย ${baht(paid)}${Math.abs(tot - paid) > 0.01 ? ' <span class="bad">ยังไม่เท่ากัน</span>' : ' ✓'}` : '';
+      const its = items(), left = [];
+      r.cases.filter(c => c.price || $(`.vPrice[data-case="${c.id}"]`)?.value).forEach(c => { const pr = Number($(`.vPrice[data-case="${c.id}"]`)?.value) || c.price || 0; const today = its.filter(x => x.caseId === c.id).reduce((n, x) => n + x.amount, 0);
+        if (pr) left.push(`${esc(c.work)} คงเหลือ <b>${baht(Math.max(0, pr - (c.paid || 0) - today))}</b>`); });
+      S.newCases.forEach(n => { const pr = Number(n.price) || 0, today = its.filter(x => x.caseId === n.key).reduce((m, x) => m + x.amount, 0); if (pr) left.push(`${esc(n.work)} คงเหลือ <b>${baht(Math.max(0, pr - today))}</b>`); });
+      $('#vSum').innerHTML = (tot ? `รวมรายการ ${baht(tot)} · จ่าย ${baht(paid)}${Math.abs(tot - paid) > 0.01 ? ' <span class="bad">ยังไม่เท่ากัน</span>' : ' ✓'}` : '') + (left.length ? `<br>หลังจ่ายวันนี้: ${left.join(' · ')}` : '');
       $('#vSlipBox').hidden = !(Number($('#vTr').value) > 0); }
   };
   $('#vBack').onclick = () => { if (dirty && !confirm('ยังไม่ได้บันทึก ออกจากหน้านี้?')) return; dirty = false; viewAppt(); };
@@ -2020,6 +2031,23 @@ async function viewVisit(id, note) {
     refresh(); });
   if (M) {
     $('#vAddItem').onclick = () => { $('#vItems').insertAdjacentHTML('beforeend', itemRow({ caseId: firstCase?.id })); refresh(); };
+    const drawNew = () => { $('#vNewCases').innerHTML = S.newCases.map((n, i) => `<div class="row s" style="padding:4px 0;border-top:1px dashed var(--line)"><span class="grow">คอร์สใหม่ <b>${esc(n.work)}</b>: ราคาเต็ม</span>
+        <input class="vNewPrice" data-i="${i}" type="number" inputmode="decimal" value="${esc(n.price)}" placeholder="เช่น 40000" style="width:110px"><button type="button" class="btn ghost small" data-delnew="${i}">✕</button></div>`).join('');
+      $$('.vNewPrice').forEach(x => x.oninput = () => { S.newCases[x.dataset.i].price = x.value; refresh(); });
+      $$('[data-delnew]').forEach(x => x.onclick = () => { const n = S.newCases.splice(Number(x.dataset.delnew), 1)[0]; $$('.iCase').forEach(sel => { const o = sel.querySelector(`option[value="${n.key}"]`); if (o) o.remove(); }); drawNew(); refresh(); }); };
+    $$('[data-chip]').forEach(b => b.onclick = () => {
+      const w = b.dataset.chip, course = !!b.dataset.course;
+      let caseId = '';
+      if (course) {
+        const c = r.cases.find(x => x.course === w);
+        if (c) caseId = c.id;
+        else { const key = 'new:' + w; if (!S.newCases.some(n => n.key === key)) { S.newCases.push({ key, work: w, price: '' }); $$('.iCase').forEach(sel => sel.insertAdjacentHTML('beforeend', `<option value="${esc(key)}">คอร์สใหม่: ${esc(w)}</option>`)); drawNew(); } caseId = key; }
+      }
+      const type = w === 'X-ray' || w === 'CT' ? 'X-ray' : w === 'ขายของ' ? 'ขายของ' : 'รักษา';
+      let el = $$('.vItem').find(e => !e.querySelector('.iAmt').value && (!e.querySelector('.iTreat').value || e.querySelector('.iTreat').value === a.work));
+      if (!el) { $('#vItems').insertAdjacentHTML('beforeend', itemRow({})); el = $$('.vItem').pop(); }
+      el.querySelector('.iTreat').value = w; el.querySelector('.iType').value = type; el.querySelector('.iCase').value = caseId;
+      el.querySelector('.iAmt').focus(); refresh(); });
     $$('[data-ps]').forEach(b => b.onclick = () => { S.payStatus = S.payStatus === b.dataset.ps ? '' : b.dataset.ps; $$('[data-ps]').forEach(x => x.setAttribute('aria-pressed', x.dataset.ps === S.payStatus)); refresh(); });
   }
   $$('[data-plan]').forEach(b => b.onclick = () => { S.plan = b.dataset.plan; $$('[data-plan]').forEach(x => x.setAttribute('aria-pressed', x === b)); $('#vNext').hidden = !['next', 'move'].includes(S.plan); $('#vPp').hidden = S.plan !== 'pp';
@@ -2032,6 +2060,7 @@ async function viewVisit(id, note) {
     if (S.arrival && S.arrival !== a.status) { body.arrival = { status: S.arrival, reason: $('#vReason').value.trim() }; if (S.arrival === 'ยกเลิก' && !body.arrival.reason) return flash('ยกเลิกนัด ต้องใส่เหตุผล'); }
     body.steps = $$('[data-step]:checked').map(c => ({ id: c.dataset.step, caseId: c.dataset.case, note: (app.querySelector(`.stNote[data-for="${c.dataset.step}"]`) || {}).value || '' }));
     if (M) {
+      body.newCases = S.newCases.map(n => ({ key: n.key, work: n.work, price: n.price }));
       body.prices = $$('.vPrice').filter(i => { const c = r.cases.find(x => x.id === i.dataset.case); return String(i.value || '') !== String(c.price || ''); }).map(i => ({ caseId: i.dataset.case, price: i.value }));
       const its = items();
       if (its.length) {
