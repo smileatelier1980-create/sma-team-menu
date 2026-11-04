@@ -1128,14 +1128,14 @@ async function viewChecklist(note) {
   app.innerHTML = '<div class="center">กำลังเช็ก…</div>';
   const r = await call('checklist');
   if (!r.ok) return showError('โหลดเช็กลิสต์ไม่ได้: ' + r.error);
-  const names = {appt: 'นัดหมาย', lab: 'แล็บ', stock: 'สต็อก', cases: 'เคส', buy: 'ซื้อของ', daily: 'สรุปรายวัน', pay: 'เจ้าหนี้', df: 'DF', cap: 'ถ่ายเอกสาร'};
+  const names = {appt: 'นัดหมาย', lab: 'แล็บ', stock: 'สต็อก', cases: 'เคส', buy: 'ซื้อของ', daily: 'สรุปรายวัน', pay: 'เจ้าหนี้', df: 'DF', cap: 'ถ่ายเอกสาร', team: 'ทีมงาน'};
   // v19h: ต้องทำวันนี้ (ของฉัน) ขึ้นก่อน · ไม่ด่วนพับไว้ · ทุกรายการมีปุ่มจัดการ/เลื่อน · จัดการแล้วหายไป
   const it = r.items.map((x, i) => ({...x, i}));
   const row = x => `<div class="row" style="flex-wrap:wrap" data-ci="${x.i}"><div class="grow"><div class="s ${x.level === 'bad' ? 'bad' : 'warn'}" style="font-size:14px">${esc(x.text)}</div>
       ${x.who && !x.mine ? `<div class="s">ผู้รับผิดชอบ: ${esc(x.who)}</div>` : ''}</div>
       <button class="btn ghost small" data-go="${esc(x.tab)}">${esc(names[x.tab] || 'เปิด')}</button>
-      <div class="labact" style="width:100%;margin-top:4px">${(x.actions || []).map(a => ({discard: '<button class="btn small" data-ca="discard">ทิ้งแล้ว</button>', ack: '<button class="btn ghost small" data-ca="ack">รับทราบ</button>', return: '<button class="btn ghost small" data-ca="return">ส่งคืน/ให้บริษัทเปลี่ยน</button>', editExp: '<button class="btn ghost small" data-ca="editExp">วันหมดอายุผิด</button>'}[a] || '')).join('')}
-        <button class="btn ghost small" data-ca="snooze" data-days="3">เลื่อน 3 วัน</button><button class="btn ghost small" data-ca="snooze" data-days="7">เลื่อน 7 วัน</button></div></div>`;
+      <div class="labact" style="width:100%;margin-top:4px">${(x.actions || []).map(a => ({discard: '<button class="btn small" data-ca="discard">ทิ้งแล้ว</button>', ack: '<button class="btn ghost small" data-ca="ack">รับทราบ</button>', return: '<button class="btn ghost small" data-ca="return">ส่งคืน/ให้บริษัทเปลี่ยน</button>', editExp: '<button class="btn ghost small" data-ca="editExp">วันหมดอายุผิด</button>', approve: '<button class="btn small" data-ca="approve">อนุมัติ</button>', reject: '<button class="btn ghost small" data-ca="reject">ไม่อนุมัติ</button>'}[a] || '')).join('')}
+        ${(x.actions || []).includes('approve') ? '' : '<button class="btn ghost small" data-ca="snooze" data-days="3">เลื่อน 3 วัน</button><button class="btn ghost small" data-ca="snooze" data-days="7">เลื่อน 7 วัน</button>'}</div></div>`;
   const grouped = list => { const out = [], seen = {};
     list.forEach(x => { if (!x.group) return out.push(row(x)); if (seen[x.group]) return; seen[x.group] = 1;
       const g = list.filter(y => y.group === x.group);
@@ -1161,7 +1161,7 @@ async function viewChecklist(note) {
     }
     if (a === 'editExp') { const ne = prompt('วันหมดอายุที่ถูกต้อง (ปี-เดือน-วัน เช่น 2027-03-31)', x.exp || ''); if (!ne) return; body.newExp = ne.trim(); }
     if (a === 'return') { const n = prompt('หมายเหตุ เช่น ส่งคืนบริษัทไหน (เว้นว่างได้)', ''); if (n === null) return; body.note = n; }
-    const lbl = { discard: 'ทิ้ง ' + (body.qty || ''), ack: 'รับทราบ', return: 'ส่งคืน', editExp: 'แก้วันหมดอายุ ' + (body.newExp || ''), snooze: 'เลื่อน ' + (body.days || '') + ' วัน' }[a] || b.textContent.trim();
+    const lbl = { approve: 'อนุมัติ', reject: 'ไม่อนุมัติ', discard: 'ทิ้ง ' + (body.qty || ''), ack: 'รับทราบ', return: 'ส่งคืน', editExp: 'แก้วันหมดอายุ ' + (body.newExp || ''), snooze: 'เลื่อน ' + (body.days || '') + ' วัน' }[a] || b.textContent.trim();
     return batchAdd(b.closest('[data-ci]'), lbl, () => call('checkAction', body));
     const res = await call('checkAction', body);
     if (!res.ok) { b.disabled = false; return flash(res.error === 'bad_date' ? 'วันที่ต้องเป็นแบบ 2027-03-31' : errMore(res)); }
@@ -2084,7 +2084,8 @@ async function viewVisit(id, note) {
     b.disabled = false;
     if (!res.ok && !(res.done || []).length) { b.textContent = 'บันทึกการมาวันนี้'; return flash('บันทึกไม่ได้: ' + ((res.errors || []).join(' · ') || res.error)); }
     dirty = false;
-    const msg = (res.done || []).join(' · ') + ((res.errors || []).length ? ' · ยังไม่สำเร็จ: ' + res.errors.join(' · ') : '');
+    const errs = (res.errors || []).filter(e => !e.startsWith('⚠️')), warns = (res.errors || []).filter(e => e.startsWith('⚠️'));
+    const msg = (res.done || []).join(' · ') + (warns.length ? ' · ' + warns.join(' · ') : '') + (errs.length ? ' · ยังไม่สำเร็จ: ' + errs.join(' · ') : '');
     viewVisit(a.id, { text: 'บันทึกแล้ว: ' + msg, ok: !(res.errors || []).filter(e => !e.startsWith('⚠️')).length });
   };
 }
