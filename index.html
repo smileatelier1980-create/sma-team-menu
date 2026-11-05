@@ -175,10 +175,20 @@ function pageFromUrl() {
   return p || '';
 }
 let START_PAGE = pageFromUrl();
+// v49 ลิงก์จากแจ้งเตือนคำขอนัด: ?page=appt&req=RQ261105-01
+function reqFromUrl() {
+  const sp = new URLSearchParams(location.search);
+  let q = sp.get('req');
+  const st = sp.get('liff.state');
+  if (!q && st) { const m = st.match(/[?&]req=([\w-]+)/); q = m && m[1]; }
+  return q || '';
+}
+let REQ_FOCUS = reqFromUrl();
 async function start() {
   try {
     await liff.init({liffId: LIFF_ID});
     START_PAGE = pageFromUrl() || START_PAGE;
+    REQ_FOCUS = reqFromUrl() || REQ_FOCUS;
     if (!liff.isLoggedIn()) { liff.login({redirectUri: location.href}); return; }
     profile = await liff.getProfile().catch(() => null);
     app.innerHTML = '<div class="center">กำลังตรวจสอบสิทธิ์…</div>';
@@ -2135,6 +2145,16 @@ async function viewAppt(note) {
     ${r.dayOff ? `<div class="msg err">วันนี้${esc(r.dayOff)}</div>` : ''}
     ${(r.leaves || []).map(l => `<div class="msg err">🔴 ${esc(l.kind === 'คลินิกหยุด' ? 'คลินิกหยุด' : l.doctor + ' ลา')}${l.reason ? ' · ' + esc(l.reason) : ''}</div>`).join('')}
     <div id="leaveHost"></div>
+    ${r.requests && r.requests.length ? `<details class="card" id="apReq" open><summary class="t" style="cursor:pointer">คำขอนัดจาก LINE (${r.requests.length})${r.requests.filter(q => q.status === 'รอตรวจคิว').length ? ` · <span class="bad">รอตรวจคิว ${r.requests.filter(q => q.status === 'รอตรวจคิว').length}</span>` : ''}</summary>
+      ${r.requests.map(q => `<div class="row" style="flex-wrap:wrap" data-rq="${esc(q.id)}"><div class="grow" style="flex:1 1 100%">
+        <div style="display:flex;gap:8px;align-items:center"><div class="t grow">${esc(q.id)} · ${esc(q.name || q.lineName || 'ยังไม่ได้ใส่ชื่อ')}</div><span class="pill" style="${q.status === 'รอตรวจคิว' ? 'background:var(--warnbg);color:var(--warn)' : ''}">${esc(q.status)}</span></div>
+        ${q.lineName && q.name ? `<div class="s">ชื่อใน LINE: ${esc(q.lineName)}</div>` : ''}
+        <div class="s">บริการ: ${esc(q.service || '-')}</div>
+        <div class="s">สะดวก: ${esc(q.when || '-')}${q.alt ? ' · สำรอง: ' + esc(q.alt) : ''}</div>
+        <div class="s">รับเมื่อ ${esc(q.at)}${q.by ? ' · ' + esc(q.by) : ''}</div>
+        ${q.note ? `<div class="s bad">${esc(q.note)}</div>` : ''}</div>
+        <div class="labact" style="width:100%">${q.chat ? `<button class="btn ghost small" data-rqchat="1">💬 ตอบคนไข้</button>` : ''}<button class="btn small" data-rqbook="1">ลงนัด</button>${q.status === 'รอตรวจคิว' ? `<button class="btn ghost small" data-rqans="1">ตอบแล้ว รอคนไข้ยืนยัน</button>` : ''}<button class="btn ghost small" data-rqclose="1">ปิด</button></div>
+        <div class="rqBox" style="width:100%"></div></div>`).join('')}</details>` : ''}
     <details class="card" id="apNew" ${note === 'open' ? 'open' : ''}><summary class="t" style="cursor:pointer">+ ลงนัดใหม่</summary>
       <form id="af">
         <label for="afDn">DN</label><input id="afDn" list="apPts" placeholder="เช่น 690176">
@@ -2174,6 +2194,7 @@ async function viewAppt(note) {
   const pickUnit = u => { unit = u; app.querySelectorAll('[data-u]').forEach(x => x.setAttribute('aria-pressed', x.dataset.u === u)); };
   app.querySelectorAll('[data-u]').forEach(b => b.onclick = () => pickUnit(b.dataset.u));
   bindFollow(r, pickUnit);
+  bindApptReq(r);
   app.querySelectorAll('[data-w]').forEach(b => b.onclick = () => { afWork.value = b.dataset.w; app.querySelectorAll('[data-w]').forEach(x => x.setAttribute('aria-pressed', x === b)); });
   // v19: นัดนี้มาทำงานไหน (ติ๊กได้หลายงาน) · งานที่ไม่ได้ติ๊ก = ยังไม่ได้นัด
   const renderJobs = () => {
@@ -2200,7 +2221,7 @@ async function viewAppt(note) {
     ev.preventDefault();
     const b = ev.target.querySelector('button[type=submit]'); b.disabled = true; b.textContent = 'กำลังลงนัด…';
     const res = await call('apptCreate', {caseId: afCase.value, dn: afDn.value, nick: afNick.value, doctor: afDoc.value, unit, date: afDate.value, start: afTime.value,
-      duration: afDur.value, work: afWork.value, tooth: afTooth.value, note: afNote.value, confirmDayOff: afOff.checked, confirmLeave: afLv.checked, fromId: af.dataset.from || ''});
+      duration: afDur.value, work: afWork.value, tooth: afTooth.value, note: afNote.value, confirmDayOff: afOff.checked, confirmLeave: afLv.checked, fromId: af.dataset.from || '', reqId: af.dataset.req || ''});
     b.disabled = false; b.textContent = 'ลงนัด';
     if (!res.ok) {
       if (res.error === 'day_off') { afOffBox.hidden = false; return flash('วันที่เลือกเป็น' + res.msg + ' ติ๊กยืนยันถ้าจะลงนัดจริง'); }
@@ -2285,6 +2306,38 @@ async function loadTeamBox() {
     const ok = el.querySelector('[data-ok]'); if (ok) ok.onclick = async () => { if (await save({status: 'อนุมัติ'})) loadTeamBox(); };
     const no = el.querySelector('[data-no]'); if (no) no.onclick = async () => { if (await save({status: 'ระงับ'})) loadTeamBox(); };
   });
+}
+// v49 คำขอนัดจาก LINE หน้าบ้าน: ตอบคนไข้ในแชท Smile Art Dental → ลงนัดด้วยฟอร์มเดิม (คำขอปิดเอง)
+function bindApptReq(r) {
+  const list = r.requests || [];
+  app.querySelectorAll('[data-rq]').forEach(el => {
+    const q = list.find(x => x.id === el.dataset.rq), box = el.querySelector('.rqBox');
+    const chat = el.querySelector('[data-rqchat]');
+    if (chat) chat.onclick = () => { try { if (window.liff && liff.isInClient && liff.isInClient()) return liff.openWindow({url: q.chat, external: true}); } catch (e) {} window.open(q.chat, '_blank'); };
+    el.querySelector('[data-rqbook]').onclick = () => {
+      apNew.open = true; af.dataset.req = q.id;
+      afNick.value = q.name || q.lineName || ''; afWork.value = q.service || '';
+      afNote.value = 'คำขอ ' + q.id + (q.when ? ' · สะดวก ' + q.when : '');
+      setTimeout(() => apNew.scrollIntoView({behavior: 'smooth', block: 'start'}), 50);
+      flash('ลงนัดคำขอ ' + q.id + ': ใส่ DN ถ้าเป็นคนไข้เก่า เลือกวัน เวลา หมอ แล้วกดลงนัด · คำขอจะปิดเอง', true);
+    };
+    const ans = el.querySelector('[data-rqans]');
+    if (ans) ans.onclick = async () => { ans.disabled = true; const res = await call('apptReqSet', {id: q.id, status: 'ตอบคนไข้แล้ว'}); if (!res.ok) { ans.disabled = false; return flash(res.msg || errMore(res)); } viewAppt('คำขอ ' + q.id + ': ตอบคนไข้แล้ว รอคนไข้ยืนยัน'); };
+    el.querySelector('[data-rqclose]').onclick = () => {
+      box.innerHTML = `<form><label>เหตุผลที่ปิด</label><input class="rqWhy" required placeholder="เช่น คนไข้ไม่สะดวกแล้ว / ส่งซ้ำ / นัดผ่านช่องทางอื่น">
+        <button class="btn small" type="submit" style="width:100%;margin-top:8px">ยืนยันปิดคำขอ</button></form>`;
+      box.querySelector('form').onsubmit = async ev => { ev.preventDefault();
+        const res = await call('apptReqSet', {id: q.id, status: 'ปิด', note: box.querySelector('.rqWhy').value});
+        if (!res.ok) return flash(res.msg || errMore(res));
+        viewAppt('ปิดคำขอ ' + q.id + ' แล้ว'); };
+    };
+  });
+  if (REQ_FOCUS) {
+    const el = app.querySelector(`[data-rq="${CSS.escape(REQ_FOCUS)}"]`);
+    if (el) { el.style.outline = '2px solid var(--accent)'; el.style.borderRadius = '10px'; setTimeout(() => el.scrollIntoView({behavior: 'smooth', block: 'center'}), 80); }
+    else if (r.requests) flash('คำขอ ' + REQ_FOCUS + ' ปิดหรือลงนัดไปแล้ว', true);
+    REQ_FOCUS = '';
+  }
 }
 function bindFollow(r, pickUnit) {
   app.querySelectorAll('[data-fl]').forEach(el => {
