@@ -711,7 +711,7 @@ function shrinkCanvas(file, max) {
 const errMsg = r => ({
   no_permission: 'ยังไม่ได้รับสิทธิ์เมนูนี้ · ขอให้หมอเดียร์เปิดให้ในแท็บทีมงาน',
   missing_fields: 'กรอกข้อมูลให้ครบ', need_case: 'ของหมวดนี้ต้องเลือกเคสที่ใช้', need_lot: 'ของหมวดนี้ต้องใส่ Lot number',
-  need_fee: 'ใส่ค่าแล็บ', need_note: 'พิมพ์ว่าต้องแก้อะไร', need_method: 'เลือกว่าใช้มิลลิ่งหรือ 3D print',
+  need_fee: 'ใส่ค่าแล็บ', need_lab_photo: 'ถ่ายรูปใบส่งงานก่อนกดรับงาน', need_note: 'พิมพ์ว่าต้องแก้อะไร', need_method: 'เลือกว่าใช้มิลลิ่งหรือ 3D print',
   step_changed: 'งานนี้มีคนกดไปแล้ว รีเฟรชหน้าใหม่', not_your_step: 'ขั้นนี้ไม่ใช่ของคุณ',
   need_design: 'แนบดีไซน์สุดท้าย (STL + รูป + สเปก) ก่อน จึงจะติ๊กหมอเช็กดีไซน์ผ่าน', need_check: 'ติ๊กเช็ก ซี่ / ความยาว / สี / วัสดุ ให้ครบก่อน milling/print'
 }[r.error] || ('ทำรายการไม่สำเร็จ: ' + r.error));
@@ -849,6 +849,7 @@ async function viewLab() {
       <div class="s">${esc(l.kind === 'ในบ้าน' ? 'แล็บในบ้าน' : l.lab)} · ${progress}</div>${labDesignHtml(l)}${editable ? `<div class="lp" data-lp="${esc(l.id)}"></div>` : labStepsHtml(l, steps)}
       <div class="s">${l.appt ? 'นัดคนไข้ ' + fmtDate(l.appt) : 'ยังไม่นัดคนไข้'}${l.due ? ' · นัดรับ ' + fmtDate(l.due) : ''}${l.fee ? ' · ' + baht(l.fee) + ' บาท' : ''}</div>
       ${w ? `<div class="s bad">${esc(w)}</div>` : ''}
+      ${l.needFee ? `<div class="labact"><button class="btn small" data-act="fee">ใส่ค่าแล็บ</button>${l.photo ? ` <a class="s" href="${esc(l.photo)}" target="_blank" rel="noopener">ดูใบส่งงาน</a>` : ''}</div>` : ''}
       ${action}<div class="labform"></div></div>`;
   };
   const mine = r.labs.filter(l => l.kind === 'ในบ้าน' && l.status === 'กำลังทำ' && (me.role === 'owner' ? l.stepWho === 'หมอ' : l.mine));
@@ -861,8 +862,8 @@ async function viewLab() {
         <p class="note">ยังไม่มีเคสนี้? ไปเปิดเคสที่แท็บ "เคส" ก่อน</p>
         <label for="nlKind">ส่งที่ไหน</label>
         <select id="nlKind"><option value="ในบ้าน">แล็บในบ้าน</option><option value="นอก">แล็บนอก</option></select>
-        <div id="nlOut" hidden><label for="nlLab">ชื่อแล็บ</label><input id="nlLab" list="labNames" placeholder="ชื่อแล็บ">
-          <datalist id="labNames">${r.labNames.map(n => `<option value="${esc(n)}">`).join('')}</datalist>
+        <div id="nlOut" hidden><label for="nlLabSel">ชื่อแล็บ</label><select id="nlLabSel"><option value="">เลือกแล็บ</option>${r.labNames.map(n => `<option>${esc(n)}</option>`).join('')}<option value="__other">อื่นๆ (พิมพ์ชื่อ)</option></select>
+          <input id="nlLab" placeholder="พิมพ์ชื่อแล็บ" hidden style="margin-top:6px">
           <label for="nlDue">แล็บนัดส่งกลับ</label><input id="nlDue" type="date"></div>
         <label for="nlWork">งาน</label><input id="nlWork" required placeholder="เช่น ครอบฟัน zirconia #36">
         <label for="nlAppt">นัดคนไข้มาใส่</label><input id="nlAppt" type="date">
@@ -878,9 +879,12 @@ async function viewLab() {
 
   const kindSel = document.getElementById('nlKind');
   kindSel.onchange = () => { document.getElementById('nlOut').hidden = kindSel.value !== 'นอก'; };
+  const labSel = document.getElementById('nlLabSel');
+  labSel.onchange = () => { nlLab.hidden = labSel.value !== '__other'; if (labSel.value !== '__other') nlLab.value = labSel.value; };
   document.getElementById('nl').onsubmit = async ev => {
     ev.preventDefault();
     const b = ev.target.querySelector('button[type=submit]'); b.disabled = true;
+    if (kindSel.value === 'นอก' && !nlLab.value.trim()) { b.disabled = false; return flash('เลือกแล็บ'); }
     const res = await api('labCreate', {caseId: nlCase.value, kind: kindSel.value, lab: nlLab.value, due: nlDue.value, work: nlWork.value, appt: nlAppt.value})
       .catch(e => ({ok:false, error:e.message}));
     if (!res.ok) { b.disabled = false; return flash(errMsg(res)); }
@@ -973,13 +977,14 @@ async function viewLab() {
       cardEl.querySelectorAll('button').forEach(x => x.disabled = true);
       const res = await api(payload.action, {id, ...payload}).catch(e => ({ok:false, error:e.message}));
       if (!res.ok) { cardEl.querySelectorAll('button').forEach(x => x.disabled = false); return flash(errMsg(res)); }
-      await viewLab(); flash(okText, true);
+      await viewLab(); flash(typeof okText === 'function' ? okText(res) : okText, true);
     };
     cardEl.querySelectorAll('[data-act]').forEach(btn => btn.onclick = () => {
       const act = btn.dataset.act;
       if (act === 'done') return done({action: 'labStep', step, decision: 'done', method: btn.dataset.method || ''}, 'บันทึกแล้ว ส่งต่อให้คนถัดไป');
       if (act === 'pass') return done({action: 'labStep', step, decision: 'pass'}, 'ผ่านแล้ว ส่งต่อขั้นถัดไป');
       if (act === 'fitted') return done({action: 'labStatus', status: 'ใส่แล้ว'}, 'บันทึกว่าใส่ให้คนไข้แล้ว');
+      if (act === 'fee') { const v = prompt('ค่าแล็บ (บาท รวม VAT)', ''); if (!v || !(+v > 0)) return; return done({action: 'labFee', fee: +v}, 'ลงค่าแล็บแล้ว · รอวางบิล'); }
       if (act === 'fix' || act === 'redo') {
         box.innerHTML = `<form><label>ต้องแก้อะไร</label><input required class="fixNote">${act === 'redo' ? '<label>แล็บนัดส่งกลับใหม่</label><input type="date" class="fixDue">' : ''}
           <button class="btn small" type="submit" style="margin-top:8px">ส่งกลับไปแก้</button></form>`;
@@ -992,15 +997,17 @@ async function viewLab() {
       }
       if (act === 'receive') {
         box.innerHTML = `<form>
-          <label>ถ่ายรูปใบส่งงาน</label><input type="file" accept="image/*" capture="environment" class="rcPhoto">
-          <label>ค่าแล็บ (บาท)</label><input type="number" inputmode="decimal" min="0" required class="rcFee">
+          <label>ถ่ายรูปใบส่งงาน (ระบบอ่านยอดและเลขที่ใบให้เอง)</label><input type="file" accept="image/*" capture="environment" class="rcPhoto">
+          ${me.role === 'owner' ? '<label>ค่าแล็บ (บาท) · เว้นว่างได้ ระบบอ่านจากใบ</label><input type="number" inputmode="decimal" min="0" class="rcFee">' : ''}
           <button class="btn small" type="submit" style="margin-top:8px;width:100%">รับงานแล้ว</button></form>`;
         box.querySelector('form').onsubmit = async ev => { ev.preventDefault();
           const file = box.querySelector('.rcPhoto').files[0];
+          const feeEl = box.querySelector('.rcFee');
+          if (!file && !(feeEl && feeEl.value)) return flash('ถ่ายรูปใบส่งงานก่อนกดรับงาน');
           const sb = box.querySelector('button'); sb.disabled = true; sb.textContent = file ? 'กำลังส่งรูป…' : 'กำลังบันทึก…';
           let photo = '';
           try { if (file) photo = await shrinkImage(file); } catch (e) { sb.disabled = false; sb.textContent = 'รับงานแล้ว'; return flash(e.message); }
-          done({action: 'labReceive', fee: box.querySelector('.rcFee').value, photo}, 'รับงานกลับแล้ว');
+          done({action: 'labReceive', fee: feeEl ? feeEl.value : '', photo}, res => 'รับงานกลับแล้ว' + (res.billed ? ' · ใบส่งงานเข้าเจ้าหนี้แล้ว (รอวางบิล)' : res.waitFee ? ' · อ่านยอดจากใบไม่ได้ หมอจะใส่ค่าแล็บเอง' : ''));
         };
       }
     });
