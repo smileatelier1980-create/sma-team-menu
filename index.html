@@ -847,7 +847,7 @@ async function viewLab() {
     return `<div class="card labcard" data-lab="${esc(l.id)}" data-step="${l.step}" id="lab-${esc(l.id)}">
       <div class="t">${esc(l.caseName)} · ${esc(l.work)}</div>${l.casePhoto ? `<a class="s" href="${esc(l.casePhoto)}" target="_blank" rel="noopener">📷 รูปเคส (NAS) ดูเคส/เลือกสี</a>` : ''}${l.casePath ? `<div class="s">📁 DS file: <b>${esc(l.casePath)}</b> <button type="button" class="btn ghost small" data-copy="${esc(l.casePath)}">คัดลอก</button></div>` : ''}
       <div class="s">${esc(l.kind === 'ในบ้าน' ? 'แล็บในบ้าน' : l.lab)} · ${progress}</div>${labDesignHtml(l)}${editable ? `<div class="lp" data-lp="${esc(l.id)}"></div>` : labStepsHtml(l, steps)}
-      <div class="s">${l.appt ? 'นัดคนไข้ ' + fmtDate(l.appt) : 'ยังไม่นัดคนไข้'}${l.due ? ' · นัดรับ ' + fmtDate(l.due) : ''}${l.fee ? ' · ' + baht(l.fee) + ' บาท' : ''}</div>
+      <div class="s">${l.appt ? 'นัดคนไข้ ' + fmtDate(l.appt) : 'ยังไม่นัดคนไข้'}${l.due ? ' · นัดรับ ' + fmtDate(l.due) : ''}${l.fee ? ' · ' + baht(l.fee) + ' บาท' : l.est ? ' · ประมาณ ' + baht(l.est) + ' บาท' : ''}</div>
       ${w ? `<div class="s bad">${esc(w)}</div>` : ''}
       ${l.needFee ? `<div class="labact"><button class="btn small" data-act="fee">ใส่ค่าแล็บ</button>${l.photo ? ` <a class="s" href="${esc(l.photo)}" target="_blank" rel="noopener">ดูใบส่งงาน</a>` : ''}</div>` : ''}
       ${action}<div class="labform"></div></div>`;
@@ -864,6 +864,8 @@ async function viewLab() {
         <select id="nlKind"><option value="ในบ้าน">แล็บในบ้าน</option><option value="นอก">แล็บนอก</option></select>
         <div id="nlOut" hidden><label for="nlLabSel">ชื่อแล็บ</label><select id="nlLabSel"><option value="">เลือกแล็บ</option>${r.labNames.map(n => `<option>${esc(n)}</option>`).join('')}<option value="__other">อื่นๆ (พิมพ์ชื่อ)</option></select>
           <input id="nlLab" placeholder="พิมพ์ชื่อแล็บ" hidden style="margin-top:6px">
+          <div id="nlItemBox" hidden><label for="nlItem">รายการตามใบราคาแล็บ</label><select id="nlItem"></select>
+          <label for="nlQty">จำนวน</label><input id="nlQty" type="number" min="1" step="1" value="1" inputmode="numeric"></div>
           <label for="nlDue">แล็บนัดส่งกลับ</label><input id="nlDue" type="date"></div>
         <label for="nlWork">งาน</label><input id="nlWork" required placeholder="เช่น ครอบฟัน zirconia #36">
         <label for="nlAppt">นัดคนไข้มาใส่</label><input id="nlAppt" type="date">
@@ -880,12 +882,21 @@ async function viewLab() {
   const kindSel = document.getElementById('nlKind');
   kindSel.onchange = () => { document.getElementById('nlOut').hidden = kindSel.value !== 'นอก'; };
   const labSel = document.getElementById('nlLabSel');
-  labSel.onchange = () => { nlLab.hidden = labSel.value !== '__other'; if (labSel.value !== '__other') nlLab.value = labSel.value; };
+  const items = r.labItems || {};
+  const fillItems = () => {
+    const list = items[labSel.value] || [];
+    nlItemBox.hidden = !list.length;
+    const cats = [...new Set(list.map(x => x.cat || 'อื่น ๆ'))];
+    nlItem.innerHTML = '<option value="">— ไม่ระบุ —</option>' + cats.map(c => `<optgroup label="${esc(c)}">${list.filter(x => (x.cat || 'อื่น ๆ') === c).map(x => `<option value="${esc(x.code)}">${esc(x.name)}${x.unit ? ' (' + esc(x.unit) + ')' : ''}</option>`).join('')}</optgroup>`).join('');
+  };
+  labSel.onchange = () => { nlLab.hidden = labSel.value !== '__other'; if (labSel.value !== '__other') nlLab.value = labSel.value; fillItems(); };
+  nlItem.onchange = () => { const o = nlItem.selectedOptions[0]; if (nlItem.value && !nlWork.value.trim()) nlWork.value = o.textContent.replace(/\s*\([^)]*\)$/, ''); };
   document.getElementById('nl').onsubmit = async ev => {
     ev.preventDefault();
     const b = ev.target.querySelector('button[type=submit]'); b.disabled = true;
     if (kindSel.value === 'นอก' && !nlLab.value.trim()) { b.disabled = false; return flash('เลือกแล็บ'); }
-    const res = await api('labCreate', {caseId: nlCase.value, kind: kindSel.value, lab: nlLab.value, due: nlDue.value, work: nlWork.value, appt: nlAppt.value})
+    const res = await api('labCreate', {caseId: nlCase.value, kind: kindSel.value, lab: nlLab.value, due: nlDue.value, work: nlWork.value, appt: nlAppt.value,
+      item: kindSel.value === 'นอก' && !nlItemBox.hidden ? nlItem.value : '', qty: +nlQty.value || 1})
       .catch(e => ({ok:false, error:e.message}));
     if (!res.ok) { b.disabled = false; return flash(errMsg(res)); }
     await viewLab(); flash('บันทึกส่งงานแล็บแล้ว', true);
