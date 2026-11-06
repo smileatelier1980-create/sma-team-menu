@@ -82,6 +82,8 @@ const who = document.getElementById('who');
 const tabs = document.getElementById('tabs');
 let me = null, profile = null, stockItems = [];
 
+// v54 ผลส่งคอนเฟิร์มนัดทาง LINE คนไข้
+const cfNote = c => !c ? '' : ({sent: ' · ส่งคอนเฟิร์มทาง LINE ให้คนไข้แล้ว', no_line: ' · คนไข้ยังไม่ได้ผูก LINE จึงไม่ได้ส่งคอนเฟิร์ม', failed: ' · ⚠️ ส่ง LINE ให้คนไข้ไม่สำเร็จ' + (c.reason ? ' (' + c.reason + ')' : ''), off: ''}[c.status] || '');
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const fmtDate = v => { if (!v) return ''; const d = new Date(v); return isNaN(d) ? String(v) : d.toLocaleDateString('th-TH', {day:'numeric', month:'short'}); };
 
@@ -2129,9 +2131,11 @@ async function viewAppt(note) {
   const pill = s => `<span class="pill" style="${s === 'ไม่มา' ? 'background:var(--badbg);color:var(--bad)' : s === 'นัดแล้ว' ? '' : 'background:var(--accent);color:#fff'}">${esc(s)}</span>`;
   // v42 การ์ดย่อ: กดเพื่อเปิดหน้า "การมาวันนี้" (สถานะ จ่ายเงิน งานที่ทำ นัดต่อ อยู่ในนั้นทั้งหมด)
   const shown = a => a.payStatus && ['เสร็จ', 'มาแล้ว'].includes(a.status) ? a.payStatus : a.status;
+  // v54 สถานะคอนเฟิร์มทาง LINE คนไข้
+  const cfBadge = a => !a.lineCf ? '' : ' · ' + ({'ส่งแล้ว': '<span class="s">LINE: รอคนไข้กดยืนยัน</span>', 'ยืนยันแล้ว': '<b style="color:var(--ok,#1a7f4b)">✅ คนไข้ยืนยันแล้ว</b>', 'ขอเลื่อน': '<b class="bad">📅 คนไข้ขอเลื่อน ติดต่อกลับ</b>', 'ส่งไม่ได้': '<span class="bad">LINE ส่งไม่ได้</span>'}[a.lineCf] || esc(a.lineCf));
   const card = a => `<div class="card labcard" data-ap="${esc(a.id)}" style="cursor:pointer${a.leave ? ';border:2px solid var(--bad);background:var(--badbg)' : ''}">
       <div style="display:flex;gap:8px;align-items:center"><div class="t grow">${esc(a.start)} · ${esc(a.dn ? a.dn + ' ' : '')}${esc(a.nick)}</div>${pill(shown(a))}<span class="s">›</span></div>
-      <div class="s">${esc(a.work)}${a.tooth ? ' ' + esc(a.tooth) : ''} · ${esc(a.doctor)}</div>
+      <div class="s">${esc(a.work)}${a.tooth ? ' ' + esc(a.tooth) : ''} · ${esc(a.doctor)}${cfBadge(a)}</div>
       ${a.warn.map(w => `<div class="s bad">${esc(w)}</div>`).join('')}
       <div class="apBox"></div></div>`;
   const byUnit = u => r.list.filter(a => a.unit === u);
@@ -2171,6 +2175,7 @@ async function viewAppt(note) {
         <input id="afWork" required placeholder="หรือพิมพ์เอง" style="margin-top:6px">
         <label for="afTooth">ซี่</label><input id="afTooth" placeholder="เช่น #36">
         <label for="afNote">หมายเหตุ</label><input id="afNote">
+        <label style="display:flex;gap:8px;align-items:center;color:var(--ink);margin-top:6px"><input id="afLine" type="checkbox" checked style="width:auto;height:auto"> ส่งคอนเฟิร์มนัดทาง LINE ให้คนไข้ (ถ้าคนไข้ผูก LINE แล้ว)</label>
         <label id="afOffBox" hidden style="display:flex;gap:8px;align-items:center;color:var(--ink)"><input id="afOff" type="checkbox" style="width:auto;height:auto"> ยืนยันลงนัดวันหยุด</label>
         <label id="afLvBox" hidden style="display:flex;gap:8px;align-items:center;color:var(--ink)"><input id="afLv" type="checkbox" style="width:auto;height:auto"> ยืนยันลงนัด แม้หมอลา/ไม่ได้เข้า</label>
         <button class="btn" type="submit" style="width:100%;margin-top:12px">ลงนัด</button>
@@ -2221,7 +2226,7 @@ async function viewAppt(note) {
     ev.preventDefault();
     const b = ev.target.querySelector('button[type=submit]'); b.disabled = true; b.textContent = 'กำลังลงนัด…';
     const res = await call('apptCreate', {caseId: afCase.value, dn: afDn.value, nick: afNick.value, doctor: afDoc.value, unit, date: afDate.value, start: afTime.value,
-      duration: afDur.value, work: afWork.value, tooth: afTooth.value, note: afNote.value, confirmDayOff: afOff.checked, confirmLeave: afLv.checked, fromId: af.dataset.from || '', reqId: af.dataset.req || ''});
+      duration: afDur.value, work: afWork.value, tooth: afTooth.value, note: afNote.value, confirmDayOff: afOff.checked, confirmLeave: afLv.checked, fromId: af.dataset.from || '', reqId: af.dataset.req || '', notifyPatient: afLine.checked});
     b.disabled = false; b.textContent = 'ลงนัด';
     if (!res.ok) {
       if (res.error === 'day_off') { afOffBox.hidden = false; return flash('วันที่เลือกเป็น' + res.msg + ' ติ๊กยืนยันถ้าจะลงนัดจริง'); }
@@ -2229,7 +2234,7 @@ async function viewAppt(note) {
       if (res.error === 'clash_unit' && res.other) { flash(res.msg + ' · เปลี่ยนเป็น ' + res.other + ' ให้แล้ว กดลงนัดอีกครั้ง'); return pickUnit(res.other); }
       return flash(res.msg || errMore(res));
     }
-    apptDate = afDate.value; await viewAppt('ลงนัดแล้ว และลงปฏิทินให้แล้ว' + (res.warn ? ' · หมายเหตุ: ' + res.warn : ''));
+    apptDate = afDate.value; await viewAppt('ลงนัดแล้ว และลงปฏิทินให้แล้ว' + cfNote(res.confirm) + (res.warn ? ' · หมายเหตุ: ' + res.warn : ''));
   };
   app.querySelectorAll('[data-ap]').forEach(el => el.addEventListener('click', e => { if (e.target.closest('button,a,input,select,textarea,form,.apBox')) return; viewVisit(el.dataset.ap); }));
   app.querySelectorAll('[data-ap]').forEach(cardEl => {
@@ -2242,11 +2247,12 @@ async function viewAppt(note) {
         <div><label>เวลาใหม่</label><select class="mTime">${times.map(t => `<option ${t === a.start ? 'selected' : ''}>${t}</option>`).join('')}</select></div></div>
         <label>ยูนิต</label><select class="mUnit">${opts(r.units, a.unit)}</select>
         <label>เหตุผล</label><input class="mWhy" placeholder="เช่น คนไข้ขอเลื่อน">
+        ${a.lineOn ? '<label style="display:flex;gap:8px;align-items:center;color:var(--ink);margin-top:6px"><input class="mLine" type="checkbox" checked style="width:auto;height:auto"> ส่งวันนัดใหม่ทาง LINE ให้คนไข้กดยืนยัน</label>' : ''}
         <button class="btn small" type="submit" style="width:100%;margin-top:8px">ยืนยันเลื่อน</button></form>`;
       box.querySelector('form').onsubmit = async ev => { ev.preventDefault();
-        const res = await call('apptMove', {id, date: box.querySelector('.mDate').value, start: box.querySelector('.mTime').value, unit: box.querySelector('.mUnit').value, reason: box.querySelector('.mWhy').value});
+        const res = await call('apptMove', {id, date: box.querySelector('.mDate').value, start: box.querySelector('.mTime').value, unit: box.querySelector('.mUnit').value, reason: box.querySelector('.mWhy').value, notifyPatient: !!(box.querySelector('.mLine') || {}).checked});
         if (!res.ok) return flash(res.msg || errMore(res));
-        apptDate = box.querySelector('.mDate').value; viewAppt('เลื่อนนัดแล้ว ปฏิทินอัปเดตแล้ว');
+        apptDate = box.querySelector('.mDate').value; viewAppt('เลื่อนนัดแล้ว ปฏิทินอัปเดตแล้ว' + cfNote(res.confirm));
       };
     };
     const pp = cardEl.querySelector('[data-pp]');
