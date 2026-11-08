@@ -52,6 +52,14 @@ a{color:var(--accent)}
 .cats button[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
 .move input{height:40px}
 [hidden]{display:none!important}
+
+/* v58: shared pastel shell, existing forms and handlers stay in place */
+:root{--bg:#F5F5FA;--card:#FFFFFF;--ink:#28374D;--muted:#65738A;--line:#E9EBF2;--border:#DDE3ED;--accent:#287968;--soft:#E4F3EC;--deep:#276E5B;--warn:#925D30;--warnbg:#FFF0E3;--bad:#A44758;--badbg:#FCE8EF;--bluebg:#E9EDFD;--blueink:#586CA6;--pinkbg:#FCE8EF;--pinkink:#A15370}
+html{scroll-padding-bottom:95px}body{padding-bottom:88px}header{display:flex;align-items:center;gap:10px;padding:15px 18px;z-index:5;background:rgba(255,255,255,.98)}header:before{content:'✿';width:38px;height:38px;display:grid;place-items:center;background:var(--soft);color:var(--accent);font-size:28px;line-height:1;border-radius:13px;flex:none}header h1{font-size:15px;letter-spacing:.2px}header .who{margin-left:auto;max-width:48%;text-align:right;font-size:11px}main{padding:18px 16px 30px;gap:14px;max-width:600px}.card,.list{border:1px solid var(--line);border-radius:19px}.card{padding:16px}.list{padding:0 15px}.row{padding:13px 0}.btn,input,select{border-radius:12px}.btn{box-shadow:none}.btn.ghost{border-color:var(--border)}.pill{border-radius:9px;padding:4px 9px}.msg{border-radius:13px}.cats button{border-radius:12px;height:auto;min-height:38px}.labcard{gap:7px}.labcard .s{line-height:1.65}label{margin-top:12px}input,select,textarea{font-size:16px}summary{min-height:28px}#tabs{display:none!important}#smaDock{position:fixed;bottom:0;left:0;right:0;z-index:6;padding:8px 10px calc(9px + env(safe-area-inset-bottom));margin:0;display:flex;justify-content:space-around;gap:4px;background:var(--card);border-top:1px solid var(--border);overflow:visible}#smaDock[hidden]{display:none}#smaDock button{border:0;background:none;color:var(--muted);min-height:51px;height:auto;flex:1;max-width:150px;display:flex;flex-direction:column;gap:3px;justify-content:center;align-items:center;padding:5px 8px;border-radius:13px;font-size:11px;line-height:1.3}#smaDock button[aria-pressed=true]{background:var(--soft);color:var(--accent);font-weight:600}.sma-symbol{font-size:21px;line-height:1.2;font-family:system-ui,sans-serif}#saveBar,#batchBar{bottom:calc(79px + env(safe-area-inset-bottom))!important;z-index:7!important}#saveBar{padding-bottom:10px!important}#batchBar{padding-bottom:10px!important}.sma-hero{padding:21px;border-radius:22px;background:linear-gradient(120deg,var(--soft),var(--bluebg));display:flex;flex-direction:column;gap:15px}.sma-hero-top{display:flex;justify-content:space-between;align-items:center;gap:12px}.sma-hero h2{font-size:24px;font-weight:500;margin:3px 0}.sma-hero-flower{font-size:41px;color:var(--accent);transform:rotate(-12deg);line-height:1}.sma-date{font-size:12px;color:var(--muted)}.sma-stats{display:flex;gap:22px;flex-wrap:wrap}.sma-stats>div{flex:1;min-width:65px}.sma-n{font-size:25px;font-weight:500;font-variant-numeric:tabular-nums}.sma-quick{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px}.sma-quick button{background:var(--card);border:1px solid var(--line);border-radius:17px;display:flex;flex-direction:column;justify-content:center;align-items:center;gap:9px;min-height:93px;padding:12px 4px;color:var(--ink);font:inherit;font-size:12px;cursor:pointer}.sma-quick .sma-symbol,.sma-menu .sma-symbol{width:35px;height:35px;display:grid;place-items:center;border-radius:12px;background:var(--soft);color:var(--accent)}.sma-quick button:nth-child(2) .sma-symbol{background:var(--bluebg);color:var(--blueink)}.sma-quick button:nth-child(3) .sma-symbol{background:var(--pinkbg);color:var(--pinkink)}.sma-menu{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.sma-menu button{display:flex;align-items:center;gap:10px;border:1px solid var(--line);background:var(--card);padding:13px 11px;min-height:69px;border-radius:16px;color:var(--ink);font:inherit;font-size:14px;text-align:left;cursor:pointer}.sma-menu button:nth-child(3n+2) .sma-symbol{background:var(--warnbg);color:var(--warn)}.sma-menu button:nth-child(3n) .sma-symbol{background:var(--bluebg);color:var(--blueink)}.sma-menu-title{font-size:15px;font-weight:600;margin:5px 0 0}.sma-note{background:var(--bluebg);color:var(--blueink);border-radius:13px;padding:12px 14px;font-size:12px}.sma-subhead{display:flex;justify-content:space-between;align-items:center;gap:10px}.sma-subhead h2{font-size:21px;font-weight:500;margin:0}.sma-subhead .btn{font-size:12px;min-height:36px}.sma-loading{color:var(--muted);font-size:12px;padding:8px 0}.sma-fit{border-left:3px solid var(--accent)}.sma-fit .t{overflow-wrap:anywhere}.sma-metrics-status{font-size:11px;color:var(--muted);margin:0}.sma-error{color:var(--bad);font-size:12px}
+@media(max-width:380px){header{padding:12px}header h1{font-size:14px}header .who{font-size:11px}main{padding:15px 12px 30px}.sma-menu button{font-size:12px;padding:11px 9px;gap:7px}.sma-quick button{font-size:11px}.sma-hero h2{font-size:22px}.sma-stats{gap:12px}}
+@media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!important}}
+#vBar,main [style*="position:fixed"][style*="bottom:0"]{bottom:calc(79px + env(safe-area-inset-bottom))!important;padding-bottom:10px!important}
+
 </style>
 </head>
 <body>
@@ -64,7 +72,7 @@ a{color:var(--accent)}
   <button data-tab="stock">สต็อก</button>
   <button data-tab="lab">แล็บ</button>
   <button data-tab="buy">ซื้อของ</button>
-  <button data-tab="cap">📷 ภาพถ่าย</button>
+  <button data-tab="cap">📷 ถ่ายรูป</button>
   <button data-tab="daily">สรุปรายวัน</button>
   <button data-tab="pay" data-owner>เจ้าหนี้</button>
   <button data-tab="payroll" data-owner>เงินเดือน</button>
@@ -281,9 +289,11 @@ function route(refresh) {
   const tab = (location.hash ? location.hash.slice(1) : pageFromUrl()) || 'tasks';
   tabs.querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', b.dataset.tab === tab));
   let page = tab === 'schedule' ? 'cases' : tab;
-  if (me && me.tabs && !me.tabs.includes(page) && page !== 'patient') page = me.tabs[0];
+  const authPage = ({more:'',mytasks:'tasks',labfit:'lab',recall:'cases'})[page] ?? page;
+  if (me && me.tabs && authPage && !me.tabs.includes(authPage) && page !== 'patient') page = me.tabs[0];
   tabs.querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', b.dataset.tab === page));
-  ({tasks: viewTasks, stock: viewStock, team: viewTeam, cases: viewCases2, lab: viewLab, buy: viewBuy, daily: () => viewDaily2(), checklist: viewChecklist, appt: () => viewAppt(), cap: () => viewCapture(), pay: () => viewPay(), payroll: () => viewPayroll(), df: () => viewDF()}[page] || soon)(page);
+  smaDock(page);
+  ({tasks: viewSmaHome, mytasks: viewTasks, more: viewSmaMore, labfit: viewSmaLabFits, recall: viewSmaRecall, stock: viewStock, team: viewTeam, cases: viewCases2, lab: viewLab, buy: viewBuy, daily: () => viewDaily2(), checklist: viewChecklist, appt: () => viewAppt(), cap: () => viewCapture(), pay: () => viewPay(), payroll: () => viewPayroll(), df: () => viewDF()}[page] || soon)(page);
   if (page === 'appt' || page === 'cases') bgCalSync(page);
 }
 // v34.1 ดึงปฏิทินแยกเบื้องหลัง (ไม่ให้หน้าเมนูรอ) · มีนัดเปลี่ยน → โหลดหน้าใหม่เงียบ ๆ
@@ -2578,7 +2588,7 @@ function bindOwnerReports() {
   };
 }
 
-// ---------- 📷 ถ่ายเอกสาร ----------
+// ---------- 📷 ถ่ายรูป ----------
 const CAP_KINDS = [['slip_in', 'สลิปคนไข้โอนเข้า'], ['slip_out', 'สลิปหมอจ่ายเจ้าหนี้'], ['invoice', 'ใบส่งของ/ใบแจ้งหนี้/ใบเสร็จ (แล็บ ร้าน)'], ['billing', 'ใบวางบิล (รวมหลายใบ)'],
   ['expense', 'รายจ่ายจ่ายแล้ว (ค่าส่ง ร้านค้า สำรองจ่าย)'], ['settlement', 'สลิปปิดยอดเครื่องรูดบัตร'], ['other', 'เก็บรูปอย่างเดียว (เช่น ใบสรุปรายวันลายมือ)'], ['discard', 'ทิ้ง (ถ่ายผิด)']];
 const kindOf = k => ({ slip_staff: 'expense', slip_staff_in: 'slip_in', receipt_paid: 'expense', daily_paper: 'other' }[k] || k);
@@ -2895,6 +2905,120 @@ async function depSection(host) {
 }
 
 function toM(h) { const [a, b] = String(h).split(':').map(Number); return a * 60 + (b || 0); }
+
+// v58: display-only navigation; the existing identity, permissions, APIs and forms remain authoritative.
+function smaCan(tab) {
+  if (!me) return false;
+  const b = tabs.querySelector('[data-tab="' + tab + '"]');
+  return !!b && !b.hidden && (!me.tabs || me.tabs.includes(tab));
+}
+function smaIsLab() { return !!me && /ช่าง|แล็บ/.test(String(me.position || '')); }
+function smaIsAssistant() { return !!me && String(me.position || '').trim() === 'ผู้ช่วยทันตแพทย์'; }
+function smaGo(page) {
+  const perm = ({more: '', mytasks:'tasks', recall: 'cases', labfit: 'lab'})[page] ?? page;
+  if (perm && !smaCan(perm)) return;
+  smaRecordUse('menu:' + page);
+  if (page === 'more' && location.hash === '#more') return viewSmaMore();
+  if (location.hash === '#' + page) return route();
+  location.hash = page;
+}
+function smaDock(page) {
+  let dock = document.getElementById('smaDock');
+  if (!dock) { dock = document.createElement('nav'); dock.id = 'smaDock'; dock.setAttribute('aria-label', 'เมนูหลัก'); document.body.appendChild(dock); }
+  const nav = [['tasks','⌂','หน้าหลัก'], smaIsLab() ? ['lab','▧','งานแล็บ'] : ['appt','▦','นัดหมาย'], smaIsLab() ? ['cap','◎','ภาพถ่าย'] : ['cases','♡','เคส'], ['more','⊞','เพิ่มเติม']];
+  const active = nav.some(n => n[0] === page) ? page : 'more';
+  dock.hidden = false;
+  dock.innerHTML = nav.filter(n => n[0] === 'more' || smaCan(n[0])).map(n => `<button type="button" data-sma-page="${n[0]}" aria-pressed="${active === n[0]}"><span class="sma-symbol" aria-hidden="true">${n[1]}</span>${n[2]}</button>`).join('');
+  dock.querySelectorAll('[data-sma-page]').forEach(b => b.onclick = () => smaGo(b.dataset.smaPage));
+}
+function smaBindLinks(host) {
+  host.querySelectorAll('[data-sma-page]').forEach(b => b.onclick = () => smaGo(b.dataset.smaPage));
+  host.querySelectorAll('[data-sma-action="newappt"]').forEach(b => b.onclick = async () => {
+    if (!smaCan('appt')) return;
+    history.pushState(null, '', '#appt');
+    dirty = false; smaDock('appt');
+    smaRecordUse('action:newappt');
+    await viewAppt('open');
+    const form = document.getElementById('apNew');
+    if (form) { form.open = true; form.scrollIntoView({behavior:'smooth', block:'start'}); }
+  });
+}
+function smaMenuButton(p, icon, label) { return `<button type="button" data-sma-page="${p}"><span class="sma-symbol" aria-hidden="true">${icon}</span><span>${label}</span></button>`; }
+function viewSmaMore() {
+  const defs = [['tasks','⌂','หน้าหลัก'],['checklist','☑','งานค้าง'],['cases','♡','เคส'],['appt','▦','นัดหมาย'],['lab','▧','งานแล็บ'],['cap','◎','ถ่ายรูป'],['stock','▥','สต็อก'],['buy','♧','ซื้อของ'],['daily','▤','สรุปรายวัน'],['team','♙','ทีมงาน'],['df','∑','DF'],['pay','▱','เจ้าหนี้'],['payroll','▣','เงินเดือน']];
+  app.innerHTML = '<div class="sma-subhead"><div><h2>เพิ่มเติม</h2><div class="s">ทุกงานของคลินิก อยู่ในที่เดียว</div></div></div><div class="sma-menu">' + defs.filter(x => smaCan(x[0])).map(x => smaMenuButton(...x)).join('') + '</div>' + (smaCan('cases') ? '<div class="sma-menu-title">ดูแลต่อเนื่อง</div><div class="sma-menu">' + smaMenuButton('recall','◷','รีคอล 6 เดือน') + '</div>' : '') + (smaCan('lab') ? '<div class="sma-menu">' + smaMenuButton('labfit','▦','วันนัดใส่งาน') + '</div>' : '');
+  smaBindLinks(app);
+}
+let smaHomeGeneration = 0;
+async function viewSmaHome() {
+  const gen = ++smaHomeGeneration;
+  const lab = smaIsLab(), assistant = smaIsAssistant();
+  const quick = lab ? [['lab','▧','งานแล็บ'],['labfit','▦','วันนัดใส่งาน'],['stock','▥','วัสดุแล็บ']] : [['cap','◎','ถ่ายรูป'],['checklist','☑','งานของฉัน'],assistant ? ['team','◷','ลงเวลา'] : ['newappt','▦','เพิ่มนัด']];
+  const q = quick.filter(x => x[0] === 'newappt' ? smaCan('appt') : smaCan(x[0] === 'labfit' ? 'lab' : x[0]));
+  app.innerHTML = `<div class="sma-hero"><div class="sma-hero-top"><div><div class="sma-date">${new Date().toLocaleDateString('th-TH',{weekday:'long',day:'numeric',month:'long',timeZone:'Asia/Bangkok'})}</div><h2>สวัสดี ${esc(me.nickname || '')}</h2><div class="s">${lab ? 'งานที่ต้องส่ง อยู่ตรงนี้แล้ว' : 'งานสำคัญของวันนี้ อยู่ตรงนี้แล้ว'}</div></div><span class="sma-hero-flower" aria-hidden="true">✿</span></div><div class="sma-stats"><div><div class="sma-n" id="smaCountCases">—</div><div class="s">${lab ? 'ขั้นงานแล็บ' : 'เคสที่ต้องตาม'}</div></div><div><div class="sma-n" id="smaCountTasks">—</div><div class="s">งานของฉัน</div></div>${smaCan('appt') && !lab ? '<div><div class="sma-n" id="smaCountAppt">—</div><div class="s">นัดวันนี้</div></div>' : ''}</div></div><div class="sma-quick">${q.map(x => `<button type="button" ${x[0] === 'newappt' ? 'data-sma-action="newappt"' : 'data-sma-page="' + x[0] + '"'}><span class="sma-symbol" aria-hidden="true">${x[1]}</span>${x[2]}</button>`).join('')}</div><div id="smaHomeTasks"><div class="sma-loading">กำลังตรวจงานล่าสุด…</div></div>${smaCan('cases') && !lab ? '<button type="button" class="btn ghost" data-sma-page="recall">◷ กลุ่มรีคอล 6 เดือน · แอดมินเป็นผู้ติดต่อ</button>' : ''}<div id="smaTodayAppts"></div>`;
+  smaBindLinks(app);
+  const stillHome = () => gen === smaHomeGeneration && !!document.getElementById('smaHomeTasks');
+  const tasks = call('tasksHome').then(h => {
+    if (!stillHome()) return;
+    const box = document.getElementById('smaHomeTasks');
+    if (!h.ok) { box.innerHTML = '<div class="sma-error">โหลดงานไม่ได้: ' + esc(h.error || '') + '</div>'; return; }
+    const ts = h.tasks || [], cs = h.cases || [], ls = h.labs || [];
+    document.getElementById('smaCountCases').textContent = String(lab ? ls.length : cs.length);
+    document.getElementById('smaCountTasks').textContent = String(ts.length);
+    const caseRows = cs.slice(0,3).map(c => `<div class="row"><div class="grow"><div class="t">${esc(c.dn ? c.dn + ' ' : '')}${esc(c.name)} · ${esc(c.work)}</div><div class="s">${esc(c.status)}</div>${(c.why || []).slice(0,2).map(w => '<div class="s warn">' + esc(w) + '</div>').join('')}</div><button class="btn ghost small" type="button" data-sma-case="${esc(c.id)}">เปิด</button></div>`).join('');
+    const labRows = ls.slice(0,4).map(l => `<div class="row"><div class="grow"><div class="t">${esc(l.stepName)}</div><div class="s">${esc(l.caseName)} · ${esc(l.work)}</div><div class="s">ขั้น ${esc(l.step)}/${esc(l.total)}${l.appt ? ' · นัดใส่งาน ' + fmtDate(l.appt) : ''}</div></div><button class="btn ghost small" type="button" data-sma-lab="${esc(l.id)}">เปิด</button></div>`).join('');
+    const taskRows = ts.slice(0,3).map(t => `<div class="row"><div class="grow"><div class="t">${esc(t['ชื่องาน'])}</div><div class="s">${t['กำหนดเสร็จ'] ? 'กำหนด ' + fmtDate(t['กำหนดเสร็จ']) : 'งานที่ได้รับมอบหมาย'}</div></div></div>`).join('');
+    box.innerHTML = (labRows ? '<div class="sma-menu-title">งานแล็บรอฉัน</div><div class="list">' + labRows + '</div>' : '') + (caseRows ? '<div class="sma-menu-title">เคสที่ต้องทำ / ต้องตาม</div><div class="list">' + caseRows + '</div>' : '') + (taskRows ? '<div class="sma-menu-title">งานทั่วไป</div><div class="list">' + taskRows + '</div>' : '') || '<div class="card">ไม่มีงานค้างของฉัน</div>';
+    box.insertAdjacentHTML('beforeend', '<button class="btn ghost small" type="button" data-sma-page="mytasks">ดูงานของฉันทั้งหมด</button>');
+    smaBindLinks(box);
+    box.style.display = 'contents';
+    box.querySelectorAll('[data-sma-case]').forEach(b => b.onclick = () => { smaDock('cases'); viewCase2(b.dataset.smaCase); });
+    box.querySelectorAll('[data-sma-lab]').forEach(b => b.onclick = () => { openLabId = b.dataset.smaLab; smaGo('lab'); });
+  });
+  let appointments = Promise.resolve();
+  if (smaCan('appt') && !lab) appointments = call('apptDay', {date:todayISO()}).then(r => {
+    if (!stillHome()) return;
+    const n = document.getElementById('smaCountAppt'), box = document.getElementById('smaTodayAppts');
+    if (!r.ok) { if(n) n.textContent='—'; return; }
+    const list = (r.list || []).filter(a => a.status !== 'ยกเลิก');
+    if (n) n.textContent=String(list.length);
+    const upcoming = list.filter(a => a.status === 'นัดแล้ว').sort((a,b) => String(a.start).localeCompare(String(b.start))).slice(0,3);
+    box.innerHTML = '<div class="sma-subhead"><div class="sma-menu-title">นัดวันนี้</div><button type="button" class="btn ghost small" data-sma-page="appt">ดูทั้งหมด</button></div><div class="list">' + (upcoming.map(a => `<div class="row"><div class="grow"><div class="t">${esc(a.start)} · ${esc(a.dn ? a.dn + ' ' : '')}${esc(a.nick)}</div><div class="s">${esc(a.work)} · ${esc(a.doctor)} · ${esc(a.unit || 'SMA')}</div></div><button type="button" class="btn ghost small" data-sma-visit="${esc(a.id)}">เปิด</button></div>`).join('') || '<div class="row s">ไม่มีนัดที่รอมาในวันนี้</div>') + '</div>';
+    smaBindLinks(box); box.querySelectorAll('[data-sma-visit]').forEach(b => b.onclick = () => { smaDock('appt'); viewVisit(b.dataset.smaVisit); });
+  });
+  await Promise.all([tasks,appointments]);
+}
+async function viewSmaLabFits() {
+  app.innerHTML = '<div class="center">กำลังโหลดวันนัดใส่งาน…</div>';
+  const r = await call('labs');
+  if (!r.ok) return showError('โหลดนัดใส่งานไม่ได้: ' + r.error);
+  const list = (r.labs || []).filter(l => l.appt && l.status !== 'ใส่แล้ว').sort((a,b) => String(a.appt).localeCompare(String(b.appt)));
+  app.innerHTML = '<div id="m"></div><div class="sma-subhead"><div><h2>วันนัดใส่งาน</h2><div class="s">นัดคนไข้ที่ผูกกับใบงานแล็บ</div></div></div><div class="sma-note">วันนัดจากใบงานเดิม · เช็กสถานะชิ้นงานให้พร้อมก่อนคนไข้มา</div>' + (list.length ? list.map(l => `<div class="card sma-fit"><div class="sma-subhead"><div class="t">${esc(l.appt)}</div><span class="pill">${esc(l.status)}</span></div><div class="t">${esc(l.caseName)} · ${esc(l.work)}</div><div class="s">${esc(l.kind === 'ในบ้าน' ? 'แล็บในบ้าน' : l.lab)}${l.stepName ? ' · ' + esc(l.stepName) : ''}${l.due ? ' · ส่งงาน ' + esc(l.due) : ''}</div><button class="btn ghost" type="button" data-fit-lab="${esc(l.id)}">เปิดใบงาน</button></div>`).join('') : '<div class="card">ยังไม่มีวันนัดใส่งานที่ผูกกับใบงานแล็บ</div>');
+  app.querySelectorAll('[data-fit-lab]').forEach(b => b.onclick = () => { openLabId=b.dataset.fitLab; smaGo('lab'); });
+}
+async function viewSmaRecall() {
+  app.innerHTML = '<div class="center">กำลังโหลดกลุ่มรีคอล…</div>';
+  const r = await call('caseList',{all:true});
+  if (!r.ok) return showError('โหลดรีคอลไม่ได้: ' + r.error);
+  const rows = (r.cases || []).filter(c => c.status === 'รีคอล 6 เดือน').sort((a,b) => String(a.recallDate || '9999').localeCompare(String(b.recallDate || '9999')));
+  app.innerHTML = '<div id="m"></div><div class="sma-subhead"><div><h2>รีคอล 6 เดือน</h2><div class="s">แอดมินตรวจและเป็นผู้ติดต่อคนไข้</div></div></div><div class="sma-note">ยังไม่ส่ง LINE อัตโนมัติ · วันรีคอลเป็นวันครบติดตาม ยังไม่ใช่นัดที่ยืนยันกับคนไข้</div>' + (rows.map(c => `<div class="card"><div class="sma-subhead"><div class="t">${esc(c.dn || '')} ${esc(c.name)}</div><span class="pill">${c.recallDate && c.recallDate <= todayISO() ? 'ถึงรอบรีคอล' : 'รอถึงรอบ'}</span></div><div class="s">${esc(c.work)}</div><div class="s">รักษาเสร็จ ${esc(c.completedDate)} · รีคอล ${esc(c.recallDate)}</div><button type="button" class="btn ghost" data-recall-case="${esc(c.id)}">เปิดเคส</button></div>`).join('') || '<div class="card">ยังไม่มีคนไข้ในกลุ่มรีคอล</div>');
+  app.querySelectorAll('[data-recall-case]').forEach(b => b.onclick = () => { smaDock('cases'); viewCase2(b.dataset.recallCase); });
+}
+
+// Aggregate deliberate menu clicks locally; never retain patient identifiers, form values, LINE IDs or tokens.
+function smaRecordUse(key) {
+  if (!me || !/^(menu:[a-z]+|action:newappt)$/.test(key)) return;
+  try {
+    const name = 'sma_usage_v1_' + String(me.nickname || 'staff');
+    const current = JSON.parse(localStorage.getItem(name) || '{}');
+    const today = todayISO();
+    if (current.day !== today) { current.day = today; current.today = {}; }
+    current.total = current.total || {};
+    current.today[key] = (Number(current.today[key]) || 0) + 1;
+    current.total[key] = (Number(current.total[key]) || 0) + 1;
+    localStorage.setItem(name, JSON.stringify(current));
+  } catch (e) {}
+}
 
 start();
 </script>
