@@ -405,7 +405,7 @@ async function viewTeam() {
   typeSel.onchange = () => {
     const t = typeSel.value;
     document.getElementById('otBox').hidden = t !== 'โอที';
-    document.getElementById('holBox').hidden = t !== 'ทำงานวันหยุด';
+    document.getElementById('holBox').hidden = t !== 'ทำงานวันหยุด' && t !== 'โอที';
     document.getElementById('leaveBox').hidden = !t.startsWith('ลา');
     document.getElementById('rqReason').placeholder = t === 'โอที' ? 'เช่น มาเตรียมเคสก่อนเวลา' : t === 'ทำงานวันหยุด' ? 'เช่น ช่วยเก็บงานแล็บ' : 'เช่น ไม่สบาย มีใบรับรองแพทย์';
   };
@@ -435,7 +435,7 @@ async function viewTeam() {
       type: kind, date: document.getElementById('rqDate').value,
       dateTo: leave ? document.getElementById('rqTo').value : '',
       start: ot ? document.getElementById('rqStart').value : '', end: ot ? document.getElementById('rqEnd').value : '',
-      place: kind === 'ทำงานวันหยุด' ? document.getElementById('rqPlace').value : '',
+      place: kind === 'ทำงานวันหยุด' || ot ? document.getElementById('rqPlace').value : '',
       reason: document.getElementById('rqReason').value.trim()
     };
   }
@@ -453,7 +453,7 @@ async function viewTeam() {
         <div class="t">${esc(p.nickname)} · รวมจ่ายเพิ่ม ${baht(p.total)} บาท</div>
         ${p.clock ? `<div class="s">ลงเวลา ${p.daysWorked} วัน · สาย ${p.lateCount} ครั้ง${p.absentDays ? ` · <b class="bad">ขาดงานไม่แจ้ง ${p.absentDays} วัน</b>` : ''} → เบี้ยขยัน ${baht(p.allowance)}</div>
         ${p.absentDays ? `<div class="s bad">ขาด: ${p.absentDates.map(d => fmtDate(d)).join(', ')} (ขาดไม่แจ้ง = ไม่ได้เบี้ยขยัน)</div>` : ''}` : `<div class="s">${esc(p.position || '')} · ไม่ลงเวลา ไม่มีเบี้ยขยัน</div>`}
-        <div class="s">โอที ${p.otHours} ชม. × ${r.rates.ot} = ${baht(p.otPay)} · วันหยุด ${p.holidayDays} วัน × ${r.rates.holiday} = ${baht(p.holidayPay)}</div>
+        <div class="s">โอที ${p.otHours} ชม. × ${r.rates.ot} = ${baht(p.otPay)}${p.otHomeDays ? ' · โอทีที่บ้านหมอ ' + p.otHomeDays + ' วัน × ' + r.rates.otHome + ' = ' + baht(p.otHomePay) : ''} · วันหยุด ${p.holidayDays} วัน × ${r.rates.holiday} = ${baht(p.holidayPay)}</div>
         ${p.leaves.length ? `<div class="s">ลา: ${esc(p.leaves.join(', '))}</div>` : ''}
       </div>`).join('') + '<p class="note" style="margin-top:10px">วันทำงาน = ทุกวันยกเว้นวันพุธและวันหยุดคลินิก นับถึงเมื่อวาน ตั้งแต่วันที่ลงทะเบียน · ไม่ลงเวลาและไม่มีใบลาที่อนุมัติ = ขาดงาน · นับเฉพาะคำขอที่อนุมัติแล้ว</p>'
       : '<p class="s">ยังไม่มีพนักงานที่อนุมัติแล้ว</p>';
@@ -2761,7 +2761,7 @@ async function viewPayroll(month) {
   const payRows = list => list.length ? `<table style="width:100%;border-collapse:collapse;font-size:14px"><tr><th ${th}>ใคร</th><th ${th}>ยอด</th><th ${th}>วันที่</th></tr>${list.map(x => `<tr><td ${td}>${esc(x.who)}${x.ref ? `<div class="s" style="font-size:11px">${esc(x.ref)}</div>` : ''}</td><td ${td}>${baht(x.amount)}</td><td ${td}>${esc(x.date)}${x.status !== 'จ่ายแล้ว' ? ' · ' + esc(x.status) : ''}</td></tr>`).join('')}</table>` : '<p class="s">ยังไม่มี</p>';
   const people = r.people.map(p => `<div class="row" style="flex-wrap:wrap;align-items:flex-start"><div class="grow"><div class="t">${esc(p.nickname)} <span class="s">${esc(p.position || '')}</span></div>
       <div class="s">${p.clock ? `มาทำงาน ${p.daysWorked} วัน · สาย ${p.lateCount} วัน · ขาด ${p.absentDays} วัน${p.absentDays ? ' (' + p.absentDates.map(d => +d.slice(8)).join(', ') + ')' : ''} · เบี้ยขยัน ${baht(p.allowance)}` : 'ไม่ต้องลงเวลา'}</div>
-      <div class="s">โอที ${p.otHours} ชม. = ${baht(p.otPay)} · ทำงานวันหยุด ${p.holidayDays} วัน = ${baht(p.holidayPay)}</div>
+      <div class="s">โอที ${p.otHours} ชม. = ${baht(p.otPay)}${p.otHomeDays ? ' · โอทีที่บ้านหมอ ' + p.otHomeDays + ' วัน = ' + baht(p.otHomePay) : ''} · ทำงานวันหยุด ${p.holidayDays} วัน = ${baht(p.holidayPay)}</div>
       ${p.leaves && p.leaves.length ? `<div class="s">ลา: ${p.leaves.map(esc).join(' · ')}</div>` : ''}</div><div style="text-align:right"><div class="t">${baht(p.total)}</div><div class="s" style="font-size:11px">เบี้ย+โอที</div></div></div>`).join('') || '<p class="s">ไม่มีรายการ</p>';
   const byNick = {}; r.attendance.forEach(a => (byNick[a.nick] = byNick[a.nick] || []).push(a));
   const att = Object.keys(byNick).map(n => `<details style="margin:6px 0"><summary class="t" style="cursor:pointer">${esc(n)} (${byNick[n].length} วัน)</summary>
@@ -2773,7 +2773,7 @@ async function viewPayroll(month) {
       ${r.others.length ? `<div class="t" style="margin-top:10px;font-size:15px">จ่ายอื่น (ส่วนแบ่ง X-ray)</div>${payRows(r.others)}` : ''}
       <p class="s" style="margin-top:6px">DF หมอดูที่เมนู DF · ลงสลิปเงินเดือนใหม่: ส่งรูปสลิปให้ Claude หรือบันทึกในเมนูเจ้าหนี้</p></div>
     <details class="card" open><summary class="t" style="cursor:pointer">โอที / เบี้ยขยัน / ทำงานวันหยุด</summary>
-      <p class="s">โอที ${baht(r.rates.ot || 0)}/ชม. · วันหยุด ${baht(r.rates.holiday || 0)}/วัน · เบี้ยขยันเต็ม ${baht(r.rates.allowance || 0)}${r.clockStart ? ' · เริ่มนับขาด/สาย ' + esc(r.clockStart) : ''}</p>${people}</details>
+      <p class="s">โอที ${baht(r.rates.ot || 0)}/ชม. · โอทีที่บ้านหมอ ${baht(r.rates.otHome || 0)}/วัน · วันหยุด ${baht(r.rates.holiday || 0)}/วัน · เบี้ยขยันเต็ม ${baht(r.rates.allowance || 0)}${r.clockStart ? ' · เริ่มนับขาด/สาย ' + esc(r.clockStart) : ''}</p>${people}</details>
     <details class="card"><summary class="t" style="cursor:pointer">ประวัติเข้าทำงาน</summary>${att}
       <div class="t" style="margin-top:10px;font-size:15px">คำขอลา / โอที เดือนนี้</div>${reqs}</details>`;
   document.getElementById('prM').onchange = e => viewPayroll(e.target.value);
