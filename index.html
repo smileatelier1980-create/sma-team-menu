@@ -276,8 +276,8 @@ function enter() {
   tabs.querySelectorAll('[data-doctor]').forEach(b => b.hidden = !(me.role === 'owner' || me.position === 'ทันตแพทย์'));
   // v33.1 หมอที่ไม่ใช่เจ้าของ เห็นเฉพาะเมนูที่ได้สิทธิ์ (นัดของตัวเอง + DF + ที่เจ้าของเปิดให้)
   if (me.tabs) { tabs.querySelectorAll('button').forEach(b => { if (!me.tabs.includes(b.dataset.tab)) b.hidden = true; });
-    if (START_PAGE && !me.tabs.includes(START_PAGE)) START_PAGE = me.tabs[0];
-    if (!me.tabs.includes((location.hash || '#').slice(1) || 'tasks')) { try { history.replaceState(null, '', location.pathname + '#' + me.tabs[0]); } catch (e) {} } }
+    if (START_PAGE && smaPermission(START_PAGE) && !me.tabs.includes(smaPermission(START_PAGE))) START_PAGE = me.tabs[0];
+    if (smaPermission((location.hash || '#').slice(1) || 'tasks') && !me.tabs.includes(smaPermission((location.hash || '#').slice(1) || 'tasks'))) { try { history.replaceState(null, '', location.pathname + '#' + me.tabs[0]); } catch (e) {} } }
   tabs.querySelectorAll('button').forEach(b => b.onclick = () => { location.hash = b.dataset.tab; });
   if (START_PAGE && location.hash.slice(1) !== START_PAGE) { try { history.replaceState(null, '', location.pathname + '#' + START_PAGE); } catch (e) { location.hash = START_PAGE; } }
   START_PAGE = '';
@@ -294,7 +294,7 @@ function route(refresh) {
   if (me && me.tabs && authPage && !me.tabs.includes(authPage) && page !== 'patient') page = me.tabs[0];
   tabs.querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', b.dataset.tab === page));
   smaDock(page);
-  ({newappt:viewSmaNewAppt, buyapproval:()=>viewSmaApproval('buy'), teamapproval:()=>viewSmaApproval('team'), labstock:viewSmaLabStock, labphotos:viewSmaLabPhotos, tasks: viewSmaHome, mytasks: viewTasks, more: viewSmaMore, labfit: viewSmaLabFits, recall: viewSmaRecall, stock: viewStock, team: viewTeam, cases: viewCases2, lab: viewLab, buy: viewBuy, daily: () => viewDaily2(), checklist: viewChecklist, appt: () => viewAppt(), cap: () => viewCapture(), pay: () => viewPay(), payroll: () => viewPayroll(), df: () => viewDF()}[page] || soon)(page);
+  ({newappt:viewSmaNewAppt, buyapproval:()=>viewSmaApproval('buy'), teamapproval:()=>viewSmaApproval('team'), labstock:viewSmaLabStock, labphotos:viewSmaLabPhotos, tasks: viewSmaHome, mytasks: viewTasks, more: viewSmaMore, labfit: viewSmaLabFits, recall: viewSmaRecall, stock: viewStock, team: viewTeam, cases: viewCases2, lab: viewLab, buy: viewBuy, daily: () => viewDaily2(), checklist: () => viewChecklist(), appt: () => viewAppt(), cap: () => viewCapture(), pay: () => viewPay(), payroll: () => viewPayroll(), df: () => viewDF()}[page] || soon)(page);
   if (page === 'appt' || page === 'cases') bgCalSync(page);
 }
 // v34.1 ดึงปฏิทินแยกเบื้องหลัง (ไม่ให้หน้าเมนูรอ) · มีนัดเปลี่ยน → โหลดหน้าใหม่เงียบ ๆ
