@@ -60,6 +60,7 @@ html{scroll-padding-bottom:95px}body{padding-bottom:88px}header{display:flex;ali
 @media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!important}}
 #vBar,main [style*="position:fixed"][style*="bottom:0"]{bottom:calc(79px + env(safe-area-inset-bottom))!important;padding-bottom:10px!important}
 
+.sma-role-quick{grid-template-columns:repeat(3,minmax(0,1fr))}.sma-role-quick button{font-size:14px;min-height:100px}
 </style>
 </head>
 <body>
@@ -97,7 +98,7 @@ const fmtDate = v => { if (!v) return ''; const d = new Date(v); return isNaN(d)
 
 // ข้อมูลที่เปิดดูบ่อย: โชว์ของเดิมที่จำไว้ทันที แล้วดึงของใหม่ตามหลัง (ถ้าต่างและยังไม่ได้พิมพ์อะไร → วาดหน้าใหม่)
 const READ_ACTIONS = new Set(['stockTree', 'dailyToday', 'apptDay', 'checklist', 'buyHome', 'stock', 'caseList', 'labs', 'myTasks', 'today', 'myRequests', 'pending',
-  'teamList', 'payHome', 'payrollHome', 'slipInList', 'myCases', 'caseInfo', 'leaveHome', 'capHome', 'dfHome', 'reserved', 'myLabSteps', 'patients', 'tasksHome', 'patientInfo']);
+  'teamList', 'payHome', 'payrollHome', 'slipInList', 'myCases', 'caseInfo', 'leaveHome', 'capHome', 'dfHome', 'reserved', 'myLabSteps', 'labPhotosHome', 'patients', 'tasksHome', 'patientInfo']);
 const memGet = k => { try { return JSON.parse(localStorage.getItem('sma_c_' + k) || 'null'); } catch (e) { return null; } };
 const memSet = (k, v) => { const s = JSON.stringify(v); try { localStorage.setItem('sma_c_' + k, s); } catch (e) { memClear(); try { localStorage.setItem('sma_c_' + k, s); } catch (e2) {} } };
 const memClear = () => { try { Object.keys(localStorage).filter(k => k.startsWith('sma_c_')).forEach(k => localStorage.removeItem(k)); } catch (e) {} };
@@ -289,11 +290,11 @@ function route(refresh) {
   const tab = (location.hash ? location.hash.slice(1) : pageFromUrl()) || 'tasks';
   tabs.querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', b.dataset.tab === tab));
   let page = tab === 'schedule' ? 'cases' : tab;
-  const authPage = ({more:'',mytasks:'tasks',labfit:'lab',recall:'cases'})[page] ?? page;
+  const authPage = smaPermission(page);
   if (me && me.tabs && authPage && !me.tabs.includes(authPage) && page !== 'patient') page = me.tabs[0];
   tabs.querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', b.dataset.tab === page));
   smaDock(page);
-  ({tasks: viewSmaHome, mytasks: viewTasks, more: viewSmaMore, labfit: viewSmaLabFits, recall: viewSmaRecall, stock: viewStock, team: viewTeam, cases: viewCases2, lab: viewLab, buy: viewBuy, daily: () => viewDaily2(), checklist: viewChecklist, appt: () => viewAppt(), cap: () => viewCapture(), pay: () => viewPay(), payroll: () => viewPayroll(), df: () => viewDF()}[page] || soon)(page);
+  ({newappt:viewSmaNewAppt, buyapproval:()=>viewSmaApproval('buy'), teamapproval:()=>viewSmaApproval('team'), labstock:viewSmaLabStock, labphotos:viewSmaLabPhotos, tasks: viewSmaHome, mytasks: viewTasks, more: viewSmaMore, labfit: viewSmaLabFits, recall: viewSmaRecall, stock: viewStock, team: viewTeam, cases: viewCases2, lab: viewLab, buy: viewBuy, daily: () => viewDaily2(), checklist: viewChecklist, appt: () => viewAppt(), cap: () => viewCapture(), pay: () => viewPay(), payroll: () => viewPayroll(), df: () => viewDF()}[page] || soon)(page);
   if (page === 'appt' || page === 'cases') bgCalSync(page);
 }
 // v34.1 ดึงปฏิทินแยกเบื้องหลัง (ไม่ให้หน้าเมนูรอ) · มีนัดเปลี่ยน → โหลดหน้าใหม่เงียบ ๆ
@@ -872,7 +873,7 @@ async function viewLab() {
       <div class="s">${l.appt ? 'นัดคนไข้ ' + fmtDate(l.appt) : 'ยังไม่นัดคนไข้'}${l.due ? ' · นัดรับ ' + fmtDate(l.due) : ''}${l.fee ? ' · ' + baht(l.fee) + ' บาท' : l.est ? ' · ประมาณ ' + baht(l.est) + ' บาท' : ''}</div>
       ${w ? `<div class="s bad">${esc(w)}</div>` : ''}
       ${l.needFee ? `<div class="labact"><button class="btn small" data-act="fee">ใส่ค่าแล็บ</button>${l.photo ? ` <a class="s" href="${esc(l.photo)}" target="_blank" rel="noopener">ดูใบส่งงาน</a>` : ''}</div>` : ''}
-      ${action}<div class="labform"></div></div>`;
+      <button type="button" class="btn ghost small" data-lab-photos="${esc(l.id)}">รูปงานแล็บ / แนบรูป</button>${action}<div class="labform"></div></div>`;
   };
   const mine = r.labs.filter(l => l.kind === 'ในบ้าน' && l.status === 'กำลังทำ' && (me.role === 'owner' ? l.stepWho === 'หมอ' : l.mine));
   app.innerHTML = `
@@ -1989,7 +1990,7 @@ async function viewVisit(id, note) {
   const chk = (attrs, label, sub) => `<label style="display:flex;gap:8px;align-items:flex-start;padding:6px 0;border-bottom:1px solid var(--line);color:var(--ink)"><input type="checkbox" ${attrs} style="width:20px;height:20px;margin-top:2px"><span>${label}${sub ? `<br><span class="s" style="font-size:12px">${sub}</span>` : ''}</span></label>`;
   // 1 เตรียม
   const prep = [
-    ...r.labs.map(l => `<div class="s ${l.ready ? '' : 'bad'}">${l.ready ? '✓' : '⏳'} แล็บ ${esc(l.work)} · ${esc(l.lab)} · ${esc(l.status)}</div>`),
+    ...r.labs.map(l => `<div class="s ${l.ready ? '' : 'bad'}">${l.ready ? '✓' : '⏳'} แล็บ ${esc(l.work)} · ${esc(l.lab)} · ${esc(l.status)} ${smaCan('lab') ? '<button type="button" class="btn ghost small" data-lab-photos="'+esc(l.id)+'">รูปงานแล็บ</button>' : ''}</div>`),
     ...r.reserves.map(x => `<div class="s ${x.status === 'รอของ' ? 'bad' : ''}">${x.status === 'รอของ' ? '⏳' : '✓'} ของจอง ${esc(x.item)} ×${esc(x.qty)} · ${esc(x.status)}</div>`),
     !a.dn ? '<div class="s bad">ยังไม่มี DN</div>' : '',
     r.nextAppt ? `<div class="s">มีนัดครั้งหน้าแล้ว ${esc(r.nextAppt.date)} ${esc(r.nextAppt.start)} · ${esc(r.nextAppt.work)}</div>` : ''
@@ -2615,8 +2616,9 @@ async function viewCapture(note) {
       <div class="s ccProg"></div><div class="ccList">${of(c.id).map(d => capCard(d, L)).join('')}</div></details>`; };
   app.innerHTML = `
     <div id="m">${note ? `<div class="msg ok">${esc(note)}</div>` : ''}</div>
-    <div class="card"><div class="t">📷 ภาพถ่าย</div>
+    <div class="card"><div class="t">📷 ถ่ายรูป</div>
       <p class="s">เลือกหัวข้อ แล้วกด "+ เพิ่มรูป" (เลือกได้หลายรูป) ระบบอ่านให้ ช่องสีเหลืองคือที่ระบบไม่แน่ใจ ตรวจแล้วกดยืนยันทีละใบ · รูปเก็บแยกอัลบั้มตามหัวข้อ</p></div>
+    ${smaCan('lab') ? '<div class="card"><div class="t">ถ่ายรูปงานแล็บ</div><p class="s">เลือกใบงานเดิม รูปจะเชื่อมกับเคสและวันนัดใส่งานของคนไข้</p><button type="button" class="btn ghost" data-sma-page="labphotos">เลือกใบงานและแนบรูป</button></div>' : ''}
     ${cats.map(sec).join('')}
     ${legacy.length ? `<details class="card" data-cc="" open><summary class="t" style="cursor:pointer">เอกสารเดิม (ก่อนแยกหัวข้อ) · รอยืนยัน ${legacy.length}</summary><div class="ccList">${legacy.map(d => capCard(d, L)).join('')}</div></details>` : ''}
     ${r.done.length ? `<details class="card"><summary class="t" style="cursor:pointer">บันทึกแล้วล่าสุด (${r.done.length})</summary>${r.done.map(x => `<div class="s"><a href="${esc(x.url)}" target="_blank" rel="noopener">รูป</a> · ${esc(x.at)} · ${esc(x.by)}${x.cat ? ' · ' + esc(catName(x.cat)) : ''} · ${esc(x.target)}</div>`).join('')}</details>` : ''}`;
@@ -2638,7 +2640,7 @@ async function viewCapture(note) {
     prog.textContent = files.length ? `อ่านเสร็จ ${files.length} รูป ตรวจแล้วกดยืนยันทีละใบ` : '';
     inp.value = '';
   });
-  bindCapCards(L);
+  bindCapCards(L); smaBindLinks(app);
 }
 
 const yel = (d, f) => (d.unsure || []).includes(f) ? ' style="background:#fff7cc"' : '';
@@ -2906,6 +2908,7 @@ async function depSection(host) {
 
 function toM(h) { const [a, b] = String(h).split(':').map(Number); return a * 60 + (b || 0); }
 
+document.addEventListener('click',e=>{const b=e.target.closest('[data-lab-photos]');if(b)smaOpenLabPhotos(b.dataset.labPhotos);});
 // v58: display-only navigation; the existing identity, permissions, APIs and forms remain authoritative.
 function smaCan(tab) {
   if (!me) return false;
@@ -2915,7 +2918,7 @@ function smaCan(tab) {
 function smaIsLab() { return !!me && /ช่าง|แล็บ/.test(String(me.position || '')); }
 function smaIsAssistant() { return !!me && String(me.position || '').trim() === 'ผู้ช่วยทันตแพทย์'; }
 function smaGo(page) {
-  const perm = ({more: '', mytasks:'tasks', recall: 'cases', labfit: 'lab'})[page] ?? page;
+  const perm = smaPermission(page);
   if (perm && !smaCan(perm)) return;
   smaRecordUse('menu:' + page);
   if (page === 'more' && location.hash === '#more') return viewSmaMore();
@@ -2925,10 +2928,10 @@ function smaGo(page) {
 function smaDock(page) {
   let dock = document.getElementById('smaDock');
   if (!dock) { dock = document.createElement('nav'); dock.id = 'smaDock'; dock.setAttribute('aria-label', 'เมนูหลัก'); document.body.appendChild(dock); }
-  const nav = [['tasks','⌂','หน้าหลัก'], smaIsLab() ? ['lab','▧','งานแล็บ'] : ['appt','▦','นัดหมาย'], smaIsLab() ? ['cap','◎','ภาพถ่าย'] : ['cases','♡','เคส'], ['more','⊞','เพิ่มเติม']];
+  const nav = [['tasks','⌂','หน้าหลัก'], smaIsLab() ? ['lab','▧','งานแล็บ'] : ['appt','▦','นัดหมาย'], smaIsLab() ? ['labphotos','◎','ถ่ายรูป'] : ['cases','♡','เคส'], ['more','⊞','เพิ่มเติม']];
   const active = nav.some(n => n[0] === page) ? page : 'more';
   dock.hidden = false;
-  dock.innerHTML = nav.filter(n => n[0] === 'more' || smaCan(n[0])).map(n => `<button type="button" data-sma-page="${n[0]}" aria-pressed="${active === n[0]}"><span class="sma-symbol" aria-hidden="true">${n[1]}</span>${n[2]}</button>`).join('');
+  dock.innerHTML = nav.filter(n => n[0] === 'more' || smaCan(smaPermission(n[0]))).map(n => `<button type="button" data-sma-page="${n[0]}" aria-pressed="${active === n[0]}"><span class="sma-symbol" aria-hidden="true">${n[1]}</span>${n[2]}</button>`).join('');
   dock.querySelectorAll('[data-sma-page]').forEach(b => b.onclick = () => smaGo(b.dataset.smaPage));
 }
 function smaBindLinks(host) {
@@ -2938,7 +2941,7 @@ function smaBindLinks(host) {
     history.pushState(null, '', '#appt');
     dirty = false; smaDock('appt');
     smaRecordUse('action:newappt');
-    await viewAppt('open');
+    await viewAppt();
     const form = document.getElementById('apNew');
     if (form) { form.open = true; form.scrollIntoView({behavior:'smooth', block:'start'}); }
   });
@@ -2946,16 +2949,16 @@ function smaBindLinks(host) {
 function smaMenuButton(p, icon, label) { return `<button type="button" data-sma-page="${p}"><span class="sma-symbol" aria-hidden="true">${icon}</span><span>${label}</span></button>`; }
 function viewSmaMore() {
   const defs = [['tasks','⌂','หน้าหลัก'],['checklist','☑','งานค้าง'],['cases','♡','เคส'],['appt','▦','นัดหมาย'],['lab','▧','งานแล็บ'],['cap','◎','ถ่ายรูป'],['stock','▥','สต็อก'],['buy','♧','ซื้อของ'],['daily','▤','สรุปรายวัน'],['team','♙','ทีมงาน'],['df','∑','DF'],['pay','▱','เจ้าหนี้'],['payroll','▣','เงินเดือน']];
-  app.innerHTML = '<div class="sma-subhead"><div><h2>เพิ่มเติม</h2><div class="s">ทุกงานของคลินิก อยู่ในที่เดียว</div></div></div><div class="sma-menu">' + defs.filter(x => smaCan(x[0])).map(x => smaMenuButton(...x)).join('') + '</div>' + (smaCan('cases') ? '<div class="sma-menu-title">ดูแลต่อเนื่อง</div><div class="sma-menu">' + smaMenuButton('recall','◷','รีคอล 6 เดือน') + '</div>' : '') + (smaCan('lab') ? '<div class="sma-menu">' + smaMenuButton('labfit','▦','วันนัดใส่งาน') + '</div>' : '');
+  app.innerHTML = '<div class="sma-subhead"><div><h2>เพิ่มเติม</h2><div class="s">ทุกงานของคลินิก อยู่ในที่เดียว</div></div></div><div class="sma-menu">' + defs.filter(x => smaCan(x[0])).map(x => smaMenuButton(...x)).join('') + '</div>' + (smaCan('cases') ? '<div class="sma-menu-title">ดูแลต่อเนื่อง</div><div class="sma-menu">' + smaMenuButton('recall','◷','รีคอล 6 เดือน') + '</div>' : '') + (smaCan('lab') ? '<div class="sma-menu">' + smaMenuButton('labfit','▦','วันนัดใส่งาน') + smaMenuButton('labphotos','◎','ถ่ายรูปงานแล็บ') + '</div>' : '');
   smaBindLinks(app);
 }
 let smaHomeGeneration = 0;
 async function viewSmaHome() {
   const gen = ++smaHomeGeneration;
   const lab = smaIsLab(), assistant = smaIsAssistant();
-  const quick = lab ? [['lab','▧','งานแล็บ'],['labfit','▦','วันนัดใส่งาน'],['stock','▥','วัสดุแล็บ']] : [['cap','◎','ถ่ายรูป'],['checklist','☑','งานของฉัน'],assistant ? ['team','◷','ลงเวลา'] : ['newappt','▦','เพิ่มนัด']];
-  const q = quick.filter(x => x[0] === 'newappt' ? smaCan('appt') : smaCan(x[0] === 'labfit' ? 'lab' : x[0]));
-  app.innerHTML = `<div class="sma-hero"><div class="sma-hero-top"><div><div class="sma-date">${new Date().toLocaleDateString('th-TH',{weekday:'long',day:'numeric',month:'long',timeZone:'Asia/Bangkok'})}</div><h2>สวัสดี ${esc(me.nickname || '')}</h2><div class="s">${lab ? 'งานที่ต้องส่ง อยู่ตรงนี้แล้ว' : 'งานสำคัญของวันนี้ อยู่ตรงนี้แล้ว'}</div></div><span class="sma-hero-flower" aria-hidden="true">✿</span></div><div class="sma-stats"><div><div class="sma-n" id="smaCountCases">—</div><div class="s">${lab ? 'ขั้นงานแล็บ' : 'เคสที่ต้องตาม'}</div></div><div><div class="sma-n" id="smaCountTasks">—</div><div class="s">งานของฉัน</div></div>${smaCan('appt') && !lab ? '<div><div class="sma-n" id="smaCountAppt">—</div><div class="s">นัดวันนี้</div></div>' : ''}</div></div><div class="sma-quick">${q.map(x => `<button type="button" ${x[0] === 'newappt' ? 'data-sma-action="newappt"' : 'data-sma-page="' + x[0] + '"'}><span class="sma-symbol" aria-hidden="true">${x[1]}</span>${x[2]}</button>`).join('')}</div><div id="smaHomeTasks"><div class="sma-loading">กำลังตรวจงานล่าสุด…</div></div>${smaCan('cases') && !lab ? '<button type="button" class="btn ghost" data-sma-page="recall">◷ กลุ่มรีคอล 6 เดือน · แอดมินเป็นผู้ติดต่อ</button>' : ''}<div id="smaTodayAppts"></div>`;
+  const quick = smaRoleMenu();
+  const q = quick.filter(x => x[0] === 'more' || smaCan(smaPermission(x[0])));
+  app.innerHTML = `<div class="sma-hero"><div class="sma-hero-top"><div><div class="sma-date">${new Date().toLocaleDateString('th-TH',{weekday:'long',day:'numeric',month:'long',timeZone:'Asia/Bangkok'})}</div><h2>สวัสดี ${esc(me.nickname || '')}</h2><div class="s">${lab ? 'งานที่ต้องส่ง อยู่ตรงนี้แล้ว' : 'งานสำคัญของวันนี้ อยู่ตรงนี้แล้ว'}</div></div><span class="sma-hero-flower" aria-hidden="true">✿</span></div><div class="sma-stats"><div><div class="sma-n" id="smaCountCases">—</div><div class="s">${lab ? 'ขั้นงานแล็บ' : 'เคสที่ต้องตาม'}</div></div><div><div class="sma-n" id="smaCountTasks">—</div><div class="s">งานของฉัน</div></div>${smaCan('appt') && !lab ? '<div><div class="sma-n" id="smaCountAppt">—</div><div class="s">นัดวันนี้</div></div>' : ''}</div></div><div class="sma-quick sma-role-quick">${q.map(x => `<button type="button" ${x[0] === 'newappt' ? 'data-sma-action="newappt"' : 'data-sma-page="' + x[0] + '"'}><span class="sma-symbol" aria-hidden="true">${x[1]}</span>${x[2]}</button>`).join('')}</div><div id="smaHomeTasks"><div class="sma-loading">กำลังตรวจงานล่าสุด…</div></div>${smaCan('cases') && !lab ? '<button type="button" class="btn ghost" data-sma-page="recall">◷ กลุ่มรีคอล 6 เดือน · แอดมินเป็นผู้ติดต่อ</button>' : ''}<div id="smaTodayAppts"></div>`;
   smaBindLinks(app);
   const stillHome = () => gen === smaHomeGeneration && !!document.getElementById('smaHomeTasks');
   const tasks = call('tasksHome').then(h => {
@@ -3019,6 +3022,41 @@ function smaRecordUse(key) {
     localStorage.setItem(name, JSON.stringify(current));
   } catch (e) {}
 }
+
+// v59: role shortcuts and explicit rich-menu destinations.
+function smaPermission(page) {return ({more:'',mytasks:'tasks',recall:'cases',labfit:'lab',labstock:'stock',labphotos:'lab',buyapproval:'buy',teamapproval:'team',newappt:'appt'})[page] ?? page;}
+function smaRoleMenu() {
+  if(me.role==='owner')return [['checklist','☑','งานค้างของหมอ'],['buyapproval','♧','อนุมัติซื้อของ'],['daily','▤','เงินรายวัน / รับเงิน'],['teamapproval','✓','อนุมัติ OT / วันลา'],['appt','▦','นัดหมาย'],['more','⊞','เพิ่มเติม']];
+  if(smaIsLab())return [['lab','▧','งานแล็บ'],['labfit','▦','วันนัดใส่งาน'],['labstock','▥','วัสดุแล็บ'],['mytasks','☑','งานของฉัน'],['labphotos','◎','ถ่ายรูปงานแล็บ'],['more','⊞','เพิ่มเติม']];
+  if(smaIsAssistant())return [['tasks','⌂','หน้าหลัก'],['checklist','☑','งานของฉัน'],['team','◷','ลงเวลา'],['stock','▥','สต็อก'],['cap','◎','ถ่ายรูป'],['more','⊞','เพิ่มเติม']];
+  if(String(me.position||'').startsWith('ทันตแพทย์'))return [['tasks','⌂','หน้าหลัก'],['appt','▦','นัดหมาย'],['cases','♡','เคส'],['lab','▧','งานแล็บ'],['checklist','☑','งานของฉัน'],['more','⊞','เพิ่มเติม']];
+  return [['tasks','⌂','หน้าหลัก'],[String(me.position||'').startsWith('ทันตแพทย์')?'appt':'newappt','▦',String(me.position||'').startsWith('ทันตแพทย์')?'นัดหมาย':'เพิ่มนัด'],['cases','♡','เคส'],['lab','▧','งานแล็บ'],['cap','◎','ถ่ายรูป'],['more','⊞','เพิ่มเติม']];
+}
+async function viewSmaNewAppt(){await viewAppt();const f=document.getElementById('apNew');if(f){f.open=true;f.scrollIntoView({block:'start'});}}
+async function viewSmaApproval(kind){
+  if(me.role!=='owner')return showError('เมนูอนุมัตินี้สำหรับหมอเจ้าของคลินิก');
+  if(kind==='buy'){await viewBuy();const first=app.querySelector('[data-dec]');let target=first?.closest('.list');if(!target){target=document.createElement('div');target.className='card';target.textContent='ไม่มีรายการซื้อของรออนุมัติ';app.prepend(target);}target.scrollIntoView({block:'start'});}
+  else {await viewTeam();document.getElementById('pend')?.scrollIntoView({block:'start'});}
+}
+async function viewSmaLabStock(){stockPath=['แล็บ'];stockEdit='';stockSel=null;stockCond='';await viewStock();}
+let smaPhotoLab='';
+async function viewSmaLabPhotos(){
+  app.innerHTML='<div class="center">กำลังโหลดรูปงานแล็บ…</div>';
+  const r=await call('labPhotosHome');if(!r.ok)return showError('โหลดรูปงานแล็บไม่ได้: '+r.error);
+  const title=l=>[l.dn,l.nick,l.work,l.appt?'นัดใส่งาน '+fmtDate(l.appt):'ยังไม่ได้นัดใส่งาน'].filter(Boolean).join(' · ');
+  app.innerHTML='<div id="m"></div><div class="sma-subhead"><div><h2>ถ่ายรูปงานแล็บ</h2><div class="s">แนบกับใบงานและเคสเดิม</div></div></div><div class="card"><label for="smaLabPick">เลือกใบงานแล็บ · DN / ชื่อเล่น / ชื่องาน / นัดใส่งาน</label><input id="smaLabSearch" placeholder="ค้นหา DN ชื่อเล่น หรือชื่องาน"><select id="smaLabPick"><option value="">เลือกใบงานก่อนแนบรูป</option>'+r.labs.map(l=>'<option value="'+esc(l.id)+'">'+esc(title(l))+'</option>').join('')+'</select><div id="smaLabIdentity"></div><label class="btn ghost" style="display:block;text-align:center;margin-top:14px">ถ่ายรูป<input id="smaLabCamera" type="file" accept="image/*" capture="environment" hidden disabled></label><label class="btn ghost" style="display:block;text-align:center;margin-top:10px">เลือกรูปจากเครื่อง<input id="smaLabFiles" type="file" accept="image/*" multiple hidden disabled></label><div id="smaLabProgress" class="s" aria-live="polite"></div></div><div id="smaLabGallery"></div>';
+  const pick=document.getElementById('smaLabPick'),gallery=document.getElementById('smaLabGallery'),identity=document.getElementById('smaLabIdentity');
+  const draw=()=>{smaPhotoLab=pick.value;const l=r.labs.find(l=>l.id===pick.value);for(const id of ['smaLabCamera','smaLabFiles'])document.getElementById(id).disabled=!l;identity.innerHTML=l?'<div class="sma-note">'+esc(title(l))+'<div class="s">ใบงาน '+esc(l.id)+' · เคส '+esc(l.caseId)+'</div>'+(l.apptId?'<button type="button" class="btn ghost small" id="smaPhotoAppt">เปิดนัดหมายนี้</button>':'')+'</div>':'';gallery.innerHTML=l?'<div class="sma-menu-title">รูปของใบงานนี้</div>'+((r.photos||[]).filter(p=>p.labId===l.id).map(p=>'<div class="card"><a class="btn ghost" href="'+esc(p.url)+'" target="_blank" rel="noopener">เปิดรูปงานแล็บ</a><div class="s">'+esc(p.at)+' · '+esc(p.by)+'</div></div>').join('')||'<div class="card s">ยังไม่มีรูปของใบงานนี้</div>'):'';};
+  pick.value=r.labs.some(l=>l.id===smaPhotoLab)?smaPhotoLab:'';pick.onchange=draw;draw();identity.onclick=ev=>{if(ev.target.closest('#smaPhotoAppt')){const l=r.labs.find(l=>l.id===pick.value);if(l?.apptId&&smaCan('appt')){smaDock('appt');viewVisit(l.apptId);}else flash('บัญชีนี้ไม่มีสิทธิ์เปิดรายละเอียดนัดหมาย');}};
+  document.getElementById('smaLabSearch').oninput=ev=>{const q=ev.target.value.trim().toLowerCase();for(const o of pick.options)o.hidden=!!o.value&&!o.textContent.toLowerCase().includes(q);};
+  let busy=false;
+  const upload=async input=>{if(busy)return;const l=r.labs.find(l=>l.id===pick.value);if(!l)return flash('เลือกใบงานแล็บก่อนแนบรูป');const files=[...input.files];if(!files.length)return;busy=true;pick.disabled=true;const progress=document.getElementById('smaLabProgress');for(const id of ['smaLabCamera','smaLabFiles'])document.getElementById(id).disabled=true;
+    try{for(let i=0;i<files.length;i++){progress.textContent='กำลังเก็บรูป '+(i+1)+'/'+files.length;const photo=await shrinkImage(files[i]);const key='LP_'+crypto.randomUUID().replace(/-/g,'');const result=await call('labPhotoAttach',{id:l.id,photo,requestKey:key});if(!result.ok)throw new Error(result.error);}
+      progress.textContent='แนบรูปเข้ากับใบงานเดิมแล้ว';await viewSmaLabPhotos();flash('เก็บรูปและผูกกับใบงานเดิมแล้ว',true);
+    }catch(e){progress.textContent='แนบรูปไม่สำเร็จ: '+e.message;pick.disabled=false;for(const id of ['smaLabCamera','smaLabFiles'])document.getElementById(id).disabled=false;}finally{busy=false;input.value='';}};
+  document.getElementById('smaLabCamera').onchange=ev=>upload(ev.target);document.getElementById('smaLabFiles').onchange=ev=>upload(ev.target);
+}
+function smaOpenLabPhotos(id){smaPhotoLab=id;smaGo('labphotos');}
 
 start();
 </script>
