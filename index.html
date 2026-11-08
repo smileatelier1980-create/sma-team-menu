@@ -1502,15 +1502,25 @@ async function viewCases2() {
       </form></details>
     <div class="cats" role="group" aria-label="สถานะ">${['ทั้งหมด', ...groups].map(s => `<button type="button" data-st="${esc(s)}" aria-pressed="${s === caseStage}">${esc(s)} ${s === 'ทั้งหมด' ? r.cases.length : r.cases.filter(c => grp(c) === s).length}</button>`).join('')}</div>
     ${patientCards(list)}
+    <button class="btn ghost small" id="recallCases" type="button">กลุ่มรีคอล 6 เดือน</button>
+    <div id="recallList"></div>
     <button class="btn ghost small" id="allCases" type="button">ดูเคสที่จบแล้ว / ไม่รักษา</button>
     <p class="note">ใช้ DN + ชื่อเล่นเท่านั้น ไม่ใส่นามสกุลหรือเบอร์โทร</p>`;
   app.querySelectorAll('[data-st]').forEach(b => b.onclick = () => { caseStage = b.dataset.st; viewCases2(); });
   app.querySelectorAll('[data-case]').forEach(el => el.onclick = () => viewCase2(el.dataset.case));
   app.querySelectorAll('[data-pt]').forEach(el => el.onclick = () => viewPatient(el.dataset.pt));
   app.querySelectorAll('[data-addjob]').forEach(el => el.onclick = () => viewPatient(el.dataset.addjob, {add: true}));
+  document.getElementById('recallCases').onclick = async () => {
+    const box = document.getElementById('recallList'); box.innerHTML = '<div class="s">กำลังโหลด…</div>';
+    const all = await call('caseList', {all: true}).catch(e => ({ok:false, error:e.message}));
+    if (!all.ok) { box.textContent = 'โหลดกลุ่มรีคอลไม่ได้: ' + (all.error || 'ลองใหม่'); return; }
+    const rows = (all.cases || []).filter(c => c.status === 'รีคอล 6 เดือน').sort((a,b) => (a.recallDate || '9999').localeCompare(b.recallDate || '9999'));
+    box.innerHTML = '<div class="list">' + (rows.map(c => `<div class="row" data-case="${esc(c.id)}" style="cursor:pointer"><div class="grow"><div class="t">${esc(c.dn || '')} ${esc(c.name)} · ${esc(c.work)}</div><div class="s">รักษาเสร็จ ${fmtDate(c.completedDate)} · รีคอล ${fmtDate(c.recallDate)}</div></div><span class="pill">${c.recallDate && c.recallDate <= new Date().toLocaleDateString('sv-SE', {timeZone:'Asia/Bangkok'}) ? 'ถึงรอบรีคอล' : 'รีคอล 6 เดือน'}</span></div>`).join('') || '<div class="row s">ยังไม่มีคนไข้ในกลุ่มรีคอล</div>') + '</div>';
+    box.querySelectorAll('[data-case]').forEach(el => el.onclick = () => viewCase2(el.dataset.case));
+  };
   document.getElementById('allCases').onclick = async () => {
     const all = await call('caseList', {all: true});
-    const closed = (all.cases || []).filter(c => ['จบเคส', 'ไม่รักษา'].includes(c.status));
+    const closed = (all.cases || []).filter(c => ['จบเคส', 'ไม่รักษา', 'รีคอล 6 เดือน'].includes(c.status));
     app.insertAdjacentHTML('beforeend', `<div class="list">${closed.map(c => `<div class="row" data-case="${esc(c.id)}" style="cursor:pointer"><div class="grow"><div class="t">${esc(c.name)} · ${esc(c.work)}</div><div class="s">${esc(c.id)}${c.lostReason ? ' · ' + esc(c.lostReason) : ''}</div></div><span class="pill">${esc(c.status)}</span></div>`).join('') || '<div class="row s">ไม่มี</div>'}</div>`);
     app.querySelectorAll('[data-case]').forEach(el => el.onclick = () => viewCase2(el.dataset.case));
   };
@@ -1661,6 +1671,7 @@ async function viewCase2(id, msg) {
       <div class="s">${esc(c.id)} · ${esc(c.dentist)} · เริ่ม ${fmtDate(c.start)}</div>
       <div style="margin-top:10px;display:flex;gap:8px;align-items:center;flex-wrap:wrap"><span class="s">สถานะ</span><span class="pill" id="liveSt"></span><span class="s warn" id="liveHint"></span></div>
       <div class="s bad" id="liveDue" style="font-size:12px"></div>
+      ${c.status === 'รีคอล 6 เดือน' ? `<div class="msg ok">รักษาเสร็จ ${fmtDate(c.completedDate)} · รีคอล 6 เดือน วันที่ ${fmtDate(c.recallDate)}</div>` : ''}
       ${c.status === 'ไม่รักษา' && c.lostReason ? `<div class="s">เหตุผล: ${esc(c.lostReason)}</div>` : ''}
       <div style="margin-top:8px;display:flex;gap:8px;align-items:center;flex-wrap:wrap"><span class="s">ติดตามเคส</span>${c.appt
         ? `<span class="pill" style="background:var(--okbg,#e6f6ee);color:var(--ok,#1a7f4b)">นัดแล้ว</span><span class="s">นัดครั้งหน้า ${fmtDate(c.appt.date)} ${esc(String(c.appt.start || '').slice(0, 5))}${c.appt.work ? ' · ' + esc(c.appt.work) : ''}</span>`
@@ -1700,9 +1711,9 @@ async function viewCase2(id, msg) {
       <div class="s">${esc(m.by)}${m.lot ? ' · Lot ' + esc(m.lot) : ''}</div></div></div>`).join('') : '<div class="row s">ยังไม่มี (เบิกที่แท็บสต็อกแล้วเลือกเคสนี้)</div>'}</div>
     <div class="t">งานแล็บ</div>
     <div class="list">${r.labs.length ? r.labs.map(l => `<div class="row" ${l.id ? `data-golab="${esc(l.id)}" style="cursor:pointer"` : ''}><div class="grow"><div class="t">${esc(l.work)} · ${esc(l.lab)}</div><div class="s">${esc(l.status)}${l.id ? ' · กดเพื่อไปติ๊กงานแล็บ' : ''}</div>${labStepsHtml(l, r.labSteps)}</div>${l.id ? '<span class="s">›</span>' : ''}</div>`).join('') : `<div class="row s">ยังไม่มี · <button type="button" class="btn ghost small" data-newlab="${esc(c.id)}">+ ส่งงานแล็บ</button></div>`}</div>
-    <div style="text-align:center;margin-top:18px">${c.status === 'ไม่รักษา'
+    <div style="text-align:center;margin-top:18px"><div style="display:flex;justify-content:center;gap:8px;flex-wrap:wrap">${['ไม่รักษา', 'รีคอล 6 เดือน'].includes(c.status)
       ? '<button class="btn ghost small" type="button" id="reopen">เปิดเคสต่อ</button>'
-      : c.closed ? '' : '<button class="btn ghost small" type="button" id="lostBtn" style="color:var(--bad)">คนไข้ไม่รักษาต่อ</button>'}<div class="s warn" id="lostNote"></div></div>
+      : `${c.closed ? '' : '<button class="btn ghost small" type="button" id="lostBtn" style="color:var(--bad)">คนไข้ไม่รักษาต่อ</button>'}<button class="btn ghost small" type="button" id="recallBtn">รักษาเสร็จ · รีคอล 6 เดือน</button>`}</div><div class="s warn" id="lostNote"></div></div>
     <div style="height:84px"></div>
     <div id="saveBar" style="position:fixed;left:0;right:0;bottom:0;z-index:3;background:var(--card);border-top:1px solid var(--border);padding:10px 16px calc(10px + env(safe-area-inset-bottom))">
       <div class="s" id="saveHint" style="text-align:center;margin-bottom:6px">แก้ได้หลายอย่าง แล้วกดบันทึกครั้งเดียว</div>
@@ -1710,7 +1721,7 @@ async function viewCase2(id, msg) {
 
   const reload = m => viewCase2(id, m);
   // ---- เก็บทุกอย่างที่แก้ไว้ก่อน แล้วกด "บันทึกทั้งหมด" ครั้งเดียว ----
-  const P = {steps: {}, tpl: [], reserves: [], unres: new Set(), lost: '', reopen: false, surg: {}};
+  const P = {steps: {}, tpl: [], reserves: [], unres: new Set(), lost: '', reopen: false, recall: false, surg: {}};
   // ---- v19 ขั้นผ่าตัด: กดเสร็จแล้วต้องบอกของที่ใช้ (ใช้ = เลือก/เติม · ไม่ใช้ = ติ๊ก) ----
   const SURG = [{k: 'implant', label: 'รากเทียม', cats: ['รากเทียม'], tooth: true}, {k: 'bone', label: 'กระดูก', cats: ['กระดูก']},
     {k: 'mem', label: 'เมมเบรน', cats: ['เมมเบรน']}, {k: 'gum', label: 'ปลูกเหงือก', cats: ['เมมเบรน'], gum: true}, {k: 'suture', label: 'ไหม', cats: ['ไหมเย็บ']}];
@@ -1770,7 +1781,7 @@ async function viewCase2(id, msg) {
   const orig = {}; cuIds.forEach(k => { const el = document.getElementById(k); if (el) orig[k] = el.value; });
   const caseChanged = () => cuIds.some(k => { const el = document.getElementById(k); return el && el.value !== orig[k]; });
   const newOnes = () => S.filter(s => s.isNew && s.name.trim());
-  const count = () => (caseChanged() ? 1 : 0) + (P.lost ? 1 : 0) + (P.reopen ? 1 : 0) + Object.keys(P.steps).length + newOnes().length + S.filter(edited).length
+  const count = () => (caseChanged() ? 1 : 0) + (P.lost ? 1 : 0) + (P.reopen ? 1 : 0) + (P.recall ? 1 : 0) + Object.keys(P.steps).length + newOnes().length + S.filter(edited).length
     + (reordered() ? 1 : 0) + P.reserves.length + P.unres.size;
 
   const stepHtml = (s, i) => {
@@ -1858,9 +1869,9 @@ async function viewCase2(id, msg) {
     saveHint.textContent = n ? 'ยังไม่ได้บันทึก · กดปุ่มด้านล่างครั้งเดียวเมื่อแก้ครบ' : 'แก้ได้หลายอย่าง แล้วกดบันทึกครั้งเดียว';
     saveHint.className = n ? 's warn' : 's';
     // สถานะที่จะเป็นหลังบันทึก
-    const close = P.lost ? 'ไม่รักษา' : '';
+    const close = P.lost ? 'ไม่รักษา' : P.recall ? 'รีคอล 6 เดือน' : '';
     const first = S.find(s => effStatus(s) === 'รอ' && s.name.trim());
-    const live = close || (c.status === 'ไม่รักษา' && !P.reopen ? c.status : first ? first.name : S.some(s => s.name.trim()) ? 'จบเคส' : 'รอแผนจากหมอ');
+    const live = close || (['ไม่รักษา', 'รีคอล 6 เดือน'].includes(c.status) && !P.reopen ? c.status : first ? first.name : S.some(s => s.name.trim()) ? 'จบเคส' : 'รอแผนจากหมอ');
     liveSt.textContent = live;
     liveHint.textContent = live !== c.status ? '(หลังบันทึก · ตอนนี้ ' + c.status + ')' : '';
     liveDue.textContent = !close && first ? (first.wait ? 'รอ' + first.wait : '') + (first.due && !(first.due < today && c.ptAppt) ? (first.wait ? ' · ' : '') + (first.due < today ? 'เลยกำหนด ' : 'ครบกำหนด ') + fmtDate(first.due) : '') : '';
@@ -1871,14 +1882,18 @@ async function viewCase2(id, msg) {
     renderPick();
     rsList.querySelectorAll('[data-rmres]').forEach(b => b.onclick = () => { P.reserves.splice(+b.dataset.rmres, 1); refresh(); });
     app.querySelectorAll('[data-unres]').forEach(b => { const on = P.unres.has(b.dataset.unres); b.textContent = on ? 'จะยกเลิก ✓' : 'ยกเลิกจอง'; b.style.outline = on ? '3px solid var(--warn)' : ''; });
-    lostNote.textContent = P.lost ? 'จะปิดเคสเป็น "ไม่รักษา" · เหตุผล: ' + P.lost + ' (กดอีกครั้งเพื่อยกเลิก)' : P.reopen ? 'จะเปิดเคสต่อ' : '';
+    lostNote.textContent = P.lost ? 'จะปิดเคสเป็น "ไม่รักษา" · เหตุผล: ' + P.lost + ' (กดอีกครั้งเพื่อยกเลิก)' : P.recall ? 'จะจบเคสและเข้ากลุ่มรีคอล 6 เดือน · ครบวันที่ ' + fmtDate(addMonthsISO(today, 6)) + ' (กดอีกครั้งเพื่อยกเลิก)' : P.reopen ? 'จะเปิดเคสต่อ' : '';
   };
   const lostBtn = document.getElementById('lostBtn'), reopenBtn = document.getElementById('reopen');
   if (lostBtn) lostBtn.onclick = () => {
     if (P.lost) { P.lost = ''; return refresh(); }
     const why = (prompt('เหตุผลที่คนไข้ไม่รักษาต่อ (เช่น ราคา, ไปทำที่อื่น, ยังไม่พร้อม)', '') || '').trim();
     if (!why) return;
-    P.lost = why; refresh();
+    P.lost = why; P.recall = false; refresh();
+  };
+  const recallBtn = document.getElementById('recallBtn');
+  if (recallBtn) recallBtn.onclick = () => {
+    P.recall = !P.recall; P.lost = ''; P.reopen = false; refresh();
   };
   if (reopenBtn) reopenBtn.onclick = () => { P.reopen = !P.reopen; refresh(); };
   // ตัวฟังเดียวต่อหน้า (ไม่สะสมทุกครั้งที่โหลดหน้าเคสใหม่)
@@ -1935,9 +1950,9 @@ async function viewCase2(id, msg) {
       adds: newOnes().map(s => ({tmp: s.id, name: s.name.trim(), wait: s.wait, due: s.due, line: s.line || line, note: s.note || '', owner: s.owner || ''})),
       order: orderChanged() ? S.map(s => s.id) : [],
       reserves: P.reserves, unres: [...P.unres], surgery: surgPayload()};
-    if (caseChanged() || P.lost || P.reopen) {
+    if (caseChanged() || P.lost || P.reopen || P.recall) {
       const d = caseChanged() ? {dn: cuDn.value, photoLink: cuPhoto.value} : {};
-      if (P.lost) { d.status = 'ไม่รักษา'; d.lostReason = P.lost; } else if (P.reopen) d.status = 'เปิดเคสต่อ';
+      if (P.lost) { d.status = 'ไม่รักษา'; d.lostReason = P.lost; } else if (P.recall) d.status = 'รีคอล 6 เดือน'; else if (P.reopen) d.status = 'เปิดเคสต่อ';
       body.update = d;
     }
     saveAll.disabled = true; saveAll.textContent = 'กำลังบันทึก…';
