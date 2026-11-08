@@ -3029,7 +3029,7 @@ function smaRoleMenu() {
   if(me.role==='owner')return [['checklist','☑','งานค้างของหมอ'],['buyapproval','♧','อนุมัติซื้อของ'],['daily','▤','เงินรายวัน / รับเงิน'],['teamapproval','✓','อนุมัติ OT / วันลา'],['appt','▦','นัดหมาย'],['more','⊞','เพิ่มเติม']];
   if(smaIsLab())return [['lab','▧','งานแล็บ'],['labfit','▦','วันนัดใส่งาน'],['labstock','▥','วัสดุแล็บ'],['mytasks','☑','งานของฉัน'],['labphotos','◎','ถ่ายรูปงานแล็บ'],['more','⊞','เพิ่มเติม']];
   if(smaIsAssistant())return [['tasks','⌂','หน้าหลัก'],['checklist','☑','งานของฉัน'],['team','◷','ลงเวลา'],['stock','▥','สต็อก'],['cap','◎','ถ่ายรูป'],['more','⊞','เพิ่มเติม']];
-  if(String(me.position||'').startsWith('ทันตแพทย์'))return [['tasks','⌂','หน้าหลัก'],['appt','▦','นัดหมาย'],['cases','♡','เคส'],['lab','▧','งานแล็บ'],['checklist','☑','งานของฉัน'],['more','⊞','เพิ่มเติม']];
+  if(String(me.position||'').startsWith('ทันตแพทย์'))return [['appt','▦','นัดหมาย'],['df','∑','DF ของฉัน'],['daily','▤','สรุปรายวัน'],['more','⊞','เพิ่มเติม']];
   return [['tasks','⌂','หน้าหลัก'],[String(me.position||'').startsWith('ทันตแพทย์')?'appt':'newappt','▦',String(me.position||'').startsWith('ทันตแพทย์')?'นัดหมาย':'เพิ่มนัด'],['cases','♡','เคส'],['lab','▧','งานแล็บ'],['cap','◎','ถ่ายรูป'],['more','⊞','เพิ่มเติม']];
 }
 async function viewSmaNewAppt(){await viewAppt();const f=document.getElementById('apNew');if(f){f.open=true;f.scrollIntoView({block:'start'});}}
