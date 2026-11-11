@@ -2050,7 +2050,7 @@ async function viewVisit(id, note, preset) {
     ${sec(1, 'เตรียมก่อนคนไข้มา', prep)}
     ${sec(2, 'มาถึง', `<div class="cats">${['มาแล้ว', 'ไม่มา', 'ยกเลิก', ...(a.status !== 'นัดแล้ว' ? ['นัดแล้ว'] : [])].map(s => `<button type="button" data-arr="${s}" aria-pressed="${s === a.status}">${s === 'นัดแล้ว' ? 'ย้อนเป็นนัดแล้ว' : s}</button>`).join('')}</div>
       <input id="vReason" placeholder="เหตุผล (ไม่มา/ยกเลิก)" hidden style="margin-top:6px">`)}
-    ${sec(3, 'งานที่ทำวันนี้', work)}
+    ${sec(3, 'งานที่ทำวันนี้', `<label for="vWorkDone">งานที่ทำวันนี้ (แก้ได้)</label><input id="vWorkDone" value="${esc(a.work)}" placeholder="เช่น อุด #36 · ขูดหินปูน">` + work)}
     ${pay}${plan}
     <div style="height:96px"></div>
     <div id="vBar" style="position:fixed;left:0;right:0;bottom:0;z-index:3;background:var(--card);border-top:1px solid var(--border);padding:10px 16px calc(10px + env(safe-area-inset-bottom))">
@@ -2061,6 +2061,7 @@ async function viewVisit(id, note, preset) {
     const out = [];
     if (S.arrival && S.arrival !== a.status) out.push('สถานะ ' + S.arrival);
     const st = $$('[data-step]:checked'); if (st.length) out.push('ขั้นเสร็จ ' + st.length);
+    if ($('#vWorkDone') && $('#vWorkDone').value.trim() && $('#vWorkDone').value.trim() !== a.work) out.push('แก้งานวันนี้');
     if (M) {
       $$('.vPrice').forEach(i => { const c = r.cases.find(x => x.id === i.dataset.case); if (String(i.value || '') !== String(c.price || '')) out.push('ราคาแผน ' + c.work); });
       S.newCases.forEach(n => out.push('เปิดคอร์ส ' + n.work));
@@ -2123,6 +2124,7 @@ async function viewVisit(id, note, preset) {
     const b = ev.target;
     const body = { id: a.id };
     if (S.arrival && S.arrival !== a.status) { body.arrival = { status: S.arrival, reason: $('#vReason').value.trim() }; if (S.arrival === 'ยกเลิก' && !body.arrival.reason) return flash('ยกเลิกนัด ต้องใส่เหตุผล'); }
+    if ($('#vWorkDone') && $('#vWorkDone').value.trim() !== a.work) body.workDone = $('#vWorkDone').value.trim();   // v63
     body.steps = $$('[data-step]:checked').map(c => ({ id: c.dataset.step, caseId: c.dataset.case, note: (app.querySelector(`.stNote[data-for="${c.dataset.step}"]`) || {}).value || '' }));
     if (M) {
       body.newCases = S.newCases.map(n => ({ key: n.key, work: n.work, price: n.price }));
