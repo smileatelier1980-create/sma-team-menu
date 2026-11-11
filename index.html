@@ -299,7 +299,7 @@ function route(refresh) {
   tabs.querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', b.dataset.tab === page));
   smaDock(page);
   window.scrollTo(0,0);
-  ({newappt:viewSmaNewAppt, buyapproval:()=>viewSmaApproval('buy'), teamapproval:()=>viewSmaApproval('team'), labstock:viewSmaLabStock, labphotos:viewSmaLabPhotos, tasks: viewSmaHome, mytasks: viewTasks, more: viewSmaMore, labfit: viewSmaLabFits, recall: viewSmaRecall, stock: viewStock, team: viewTeam, cases: viewCases2, lab: viewLab, buy: viewBuy, daily: () => viewDaily2(), checklist: () => viewChecklist(), appt: () => viewAppt(), cap: () => viewCapture(), pay: () => viewPay(), payroll: () => viewPayroll(), df: () => viewDF()}[page] || soon)(page);
+  ({newappt:viewSmaNewAppt, buyapproval:()=>viewSmaApproval('buy'), teamapproval:()=>viewSmaApproval('team'), labstock:viewSmaLabStock, labphotos:viewSmaLabPhotos, tasks: viewSmaHome, mytasks: viewTasks, more: viewSmaMore, labfit: viewSmaLabFits, recall: viewSmaRecall, stock: viewStock, team: viewTeam, cases: viewCases2, lab: viewLab, buy: viewBuy, daily: () => viewDaily2(), checklist: () => viewChecklist(), appt: () => viewAppt(), cap: () => { capOpen = ''; viewCapture(); }, pay: () => viewPay(), payroll: () => viewPayroll(), df: () => viewDF()}[page] || soon)(page);
   if (page === 'appt' || page === 'cases') bgCalSync(page);
 }
 // v34.1 ดึงปฏิทินแยกเบื้องหลัง (ไม่ให้หน้าเมนูรอ) · มีนัดเปลี่ยน → โหลดหน้าใหม่เงียบ ๆ
@@ -2619,14 +2619,34 @@ async function viewCapture(note) {
     return `<details class="card" data-cc="${esc(c.id)}" ${n || capOpen === c.id ? 'open' : ''}><summary class="t" style="cursor:pointer">${esc(c.name)}<span class="ccN">${n ? ` · <span class="warn">รอยืนยัน ${n}</span>` : ''}</span></summary>
       <label class="btn small" style="display:inline-flex;align-items:center;justify-content:center;margin-top:8px;width:100%">+ เพิ่มรูป<input type="file" accept="image/*" multiple data-in="${esc(c.id)}" style="display:none"></label>
       <div class="s ccProg"></div><div class="ccList">${of(c.id).map(d => capCard(d, L)).join('')}</div></details>`; };
+  // v61 หน้าแรกของ "ถ่ายรูป" = ปุ่มเลือกหมวด (หมวดที่หมอตั้ง + ถ่ายรูปงานแล็บ) · กดหมวดแล้วค่อยถ่าย/เพิ่มรูปของหมวดนั้น
+  const labBtn = smaCan('lab') ? `<button type="button" data-sma-page="labphotos"><span class="sma-symbol" aria-hidden="true">◎</span><span>ถ่ายรูปงานแล็บ<br><span class="s">แนบกับใบงานและเคส</span></span></button>` : '';
+  const catBtn = c => { const n = of(c.id).length;
+    return `<button type="button" data-capcat="${esc(c.id)}"><span class="sma-symbol" aria-hidden="true">▤</span><span>${esc(c.name)}${n ? `<br><span class="warn">รอยืนยัน ${n}</span>` : ''}</span></button>`; };
+  const doneOf = id => r.done.filter(x => id == null || (x.cat || '') === id);
+  const doneList = list => list.length ? `<details class="card"><summary class="t" style="cursor:pointer">บันทึกแล้วล่าสุด (${list.length})</summary>${list.map(x => `<div class="s"><a href="${esc(x.url)}" target="_blank" rel="noopener">รูป</a> · ${esc(x.at)} · ${esc(x.by)}${x.cat ? ' · ' + esc(catName(x.cat)) : ''} · ${esc(x.target)}</div>`).join('')}</details>` : '';
+  const cur = cats.find(c => c.id === capOpen);
+  if (!cur) {
+    capOpen = '';
+    const btns = cats.map(c => catBtn(c) + (c.id === 'lab' ? labBtn : '')).join('') + (cats.some(c => c.id === 'lab') ? '' : labBtn);
+    app.innerHTML = `
+    <div id="m">${note ? `<div class="msg ok">${esc(note)}</div>` : ''}</div>
+    <div class="sma-subhead"><div><h2>ถ่ายรูป</h2><div class="s">เลือกหมวดก่อน แล้วค่อยถ่ายหรือเพิ่มรูปของหมวดนั้น</div></div></div>
+    <div class="sma-menu">${btns}</div>
+    ${legacy.length ? `<details class="card" data-cc="" open><summary class="t" style="cursor:pointer">เอกสารเดิม (ก่อนแยกหัวข้อ) · รอยืนยัน ${legacy.length}</summary><div class="ccList">${legacy.map(d => capCard(d, L)).join('')}</div></details>` : ''}
+    ${doneList(doneOf(null))}`;
+    app.querySelectorAll('[data-capcat]').forEach(b => b.onclick = () => { capOpen = b.dataset.capcat; window.scrollTo(0, 0); viewCapture(); });
+    bindCapCards(L); smaBindLinks(app);
+    return;
+  }
   app.innerHTML = `
     <div id="m">${note ? `<div class="msg ok">${esc(note)}</div>` : ''}</div>
-    <div class="card"><div class="t">📷 ถ่ายรูป</div>
-      <p class="s">เลือกหัวข้อ แล้วกด "+ เพิ่มรูป" (เลือกได้หลายรูป) ระบบอ่านให้ ช่องสีเหลืองคือที่ระบบไม่แน่ใจ ตรวจแล้วกดยืนยันทีละใบ · รูปเก็บแยกอัลบั้มตามหัวข้อ</p></div>
-    ${smaCan('lab') ? '<div class="card"><div class="t">ถ่ายรูปงานแล็บ</div><p class="s">เลือกใบงานเดิม รูปจะเชื่อมกับเคสและวันนัดใส่งานของคนไข้</p><button type="button" class="btn ghost" data-sma-page="labphotos">เลือกใบงานและแนบรูป</button></div>' : ''}
-    ${cats.map(sec).join('')}
-    ${legacy.length ? `<details class="card" data-cc="" open><summary class="t" style="cursor:pointer">เอกสารเดิม (ก่อนแยกหัวข้อ) · รอยืนยัน ${legacy.length}</summary><div class="ccList">${legacy.map(d => capCard(d, L)).join('')}</div></details>` : ''}
-    ${r.done.length ? `<details class="card"><summary class="t" style="cursor:pointer">บันทึกแล้วล่าสุด (${r.done.length})</summary>${r.done.map(x => `<div class="s"><a href="${esc(x.url)}" target="_blank" rel="noopener">รูป</a> · ${esc(x.at)} · ${esc(x.by)}${x.cat ? ' · ' + esc(catName(x.cat)) : ''} · ${esc(x.target)}</div>`).join('')}</details>` : ''}`;
+    <div class="sma-subhead"><div><h2>${esc(cur.name)}</h2><div class="s">กด "+ เพิ่มรูป" (เลือกได้หลายรูป) ระบบอ่านให้ ช่องสีเหลืองคือที่ระบบไม่แน่ใจ ตรวจแล้วกดยืนยันทีละใบ</div></div><button type="button" class="btn ghost small" id="capBack">← หมวดทั้งหมด</button></div>
+    <div class="card" data-cc="${esc(cur.id)}">
+      <label class="btn" style="display:flex;align-items:center;justify-content:center;width:100%;margin-top:0">+ เพิ่มรูป<input type="file" accept="image/*" multiple data-in="${esc(cur.id)}" style="display:none"></label>
+      <div class="s ccProg"></div><div class="ccN" hidden></div><div class="ccList">${of(cur.id).map(d => capCard(d, L)).join('')}</div></div>
+    ${doneList(doneOf(cur.id))}`;
+  app.querySelector('#capBack').onclick = () => { capOpen = ''; window.scrollTo(0, 0); viewCapture(); };
   app.querySelectorAll('[data-in]').forEach(inp => inp.onchange = async () => {
     const cat = inp.dataset.in, box = inp.closest('[data-cc]'), prog = box.querySelector('.ccProg'), list = box.querySelector('.ccList');
     capOpen = cat;
