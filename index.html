@@ -1983,7 +1983,7 @@ async function viewCase2(id, msg) {
 // ---------- นัดหมาย (ลงปฏิทิน Workspace) ----------
 let apptDate = null;
 // ---------- v42 การมาวันนี้: ทุกอย่างของคนไข้ 1 นัดในหน้าเดียว · ติ๊กแล้วบันทึกครั้งเดียว ----------
-async function viewVisit(id, note) {
+async function viewVisit(id, note, preset) {
   app.innerHTML = '<div class="center">กำลังเปิด…</div>';
   const r = await call('visitInfo', { id });
   if (!r.ok) return showError(r.error === 'no_permission' ? 'นัดนี้ไม่ใช่ของหมอ' : 'เปิดไม่ได้: ' + r.error);
@@ -2116,6 +2116,9 @@ async function viewVisit(id, note) {
     $('#vnWork').disabled = S.plan === 'move'; refresh(); });
   app.addEventListener('input', refresh); app.addEventListener('change', refresh);
   refresh();
+  // v62 เปิดจากปุ่มบนการ์ดนัด: ตั้ง "มาแล้ว" หรือเปิดส่วนนัดใหม่ให้เลย
+  if (preset && preset.arrival) { const b0 = app.querySelector(`[data-arr="${preset.arrival}"]`); if (b0 && a.status !== preset.arrival) b0.click(); }
+  if (preset && preset.plan) { const b1 = app.querySelector(`[data-plan="${preset.plan}"]`); if (b1) { b1.click(); setTimeout(() => (app.querySelector('#vNext') || b1).scrollIntoView({ behavior: 'smooth', block: 'center' }), 60); } }
   $('#vSave').onclick = async ev => {
     const b = ev.target;
     const body = { id: a.id };
@@ -2147,7 +2150,8 @@ async function viewVisit(id, note) {
     dirty = false;
     const errs = (res.errors || []).filter(e => !e.startsWith('⚠️')), warns = (res.errors || []).filter(e => e.startsWith('⚠️'));
     const msg = (res.done || []).join(' · ') + (warns.length ? ' · ' + warns.join(' · ') : '') + (errs.length ? ' · ยังไม่สำเร็จ: ' + errs.join(' · ') : '');
-    viewVisit(a.id, { text: 'บันทึกแล้ว: ' + msg, ok: !(res.errors || []).filter(e => !e.startsWith('⚠️')).length });
+    if (errs.length) return viewVisit(a.id, { text: 'บันทึกแล้ว: ' + msg, ok: false });
+    viewAppt('บันทึกแล้ว: ' + (a.nick ? a.nick + ' · ' : '') + msg);   // v62 บันทึกแล้วกลับหน้านัด
   };
 }
 
@@ -2168,6 +2172,8 @@ async function viewAppt(note) {
       <div style="display:flex;gap:8px;align-items:center"><div class="t grow">${esc(a.start)} · ${esc(a.dn ? a.dn + ' ' : '')}${esc(a.nick)}</div>${pill(shown(a))}<span class="s">›</span></div>
       <div class="s">${esc(a.work)}${a.tooth ? ' ' + esc(a.tooth) : ''} · ${esc(a.doctor)}${cfBadge(a)}</div>
       ${a.warn.map(w => `<div class="s bad">${esc(w)}</div>`).join('')}
+      ${a.status === 'นัดแล้ว' ? `<div class="labact"><button type="button" class="btn small" data-qa="come">มาแล้ว</button><button type="button" class="btn ghost small" data-qa="no">ไม่มา</button><button type="button" class="btn ghost small" data-qa="new">นัดใหม่</button></div>`
+        : a.status === 'มาแล้ว' ? `<div class="labact"><button type="button" class="btn small" data-qa="come">งาน · รายรับ</button><button type="button" class="btn ghost small" data-qa="new">นัดใหม่</button></div>` : ''}
       <div class="apBox"></div></div>`;
   const byUnit = u => r.list.filter(a => a.unit === u);
   app.innerHTML = `
@@ -2180,6 +2186,9 @@ async function viewAppt(note) {
     ${r.dayOff ? `<div class="msg err">วันนี้${esc(r.dayOff)}</div>` : ''}
     ${(r.leaves || []).map(l => `<div class="msg err">🔴 ${esc(l.kind === 'คลินิกหยุด' ? 'คลินิกหยุด' : l.doctor + ' ลา')}${l.reason ? ' · ' + esc(l.reason) : ''}</div>`).join('')}
     <div id="leaveHost"></div>
+    <!-- v62 นัดของวันขึ้นก่อน · ปุ่ม มาแล้ว / ไม่มา / นัดใหม่ อยู่บนการ์ดเลย -->
+    <div class="t">นัด${r.mineOnly ? 'ของ ' + esc(r.mineOnly) : ''} ${new Date(apptDate + 'T12:00:00').toLocaleDateString('th-TH', {weekday: 'long', day: 'numeric', month: 'short'})} (${r.list.length})</div>
+    ${r.list.length ? [...new Set(r.units.concat(r.list.map(a => a.unit)))].filter(u => byUnit(u).length).map(u => `<div class="s" style="margin-top:4px"><b>${esc(u)}</b> · ${byUnit(u).length} นัด</div>${byUnit(u).map(card).join('') || '<div class="card s">ว่างทั้งวัน</div>'}`).join('') : '<div class="card center">ยังไม่มีนัดวันนี้</div>'}
     ${r.requests && r.requests.length ? `<details class="card" id="apReq" open><summary class="t" style="cursor:pointer">คำขอนัดจาก LINE (${r.requests.length})${r.requests.filter(q => q.status === 'รอตรวจคิว').length ? ` · <span class="bad">รอตรวจคิว ${r.requests.filter(q => q.status === 'รอตรวจคิว').length}</span>` : ''}</summary>
       ${r.requests.map(q => `<div class="row" style="flex-wrap:wrap" data-rq="${esc(q.id)}"><div class="grow" style="flex:1 1 100%">
         <div style="display:flex;gap:8px;align-items:center"><div class="t grow">${esc(q.id)} · ${esc(q.name || q.lineName || 'ยังไม่ได้ใส่ชื่อ')}</div><span class="pill" style="${q.status === 'รอตรวจคิว' ? 'background:var(--warnbg);color:var(--warn)' : ''}">${esc(q.status)}</span></div>
@@ -2218,8 +2227,6 @@ async function viewAppt(note) {
         ${f.note ? `<div class="s">${esc(f.note)}</div>` : ''}</div>
         <div class="labact" style="width:100%"><button class="btn small" data-fnew="1">ลงนัดใหม่</button><button class="btn ghost small" data-fsn="1">โทรแล้ว ยังไม่สะดวก</button><button class="btn ghost small" data-fcl="1">ปิด</button></div>
         <div class="flBox" style="width:100%"></div></div>`).join('')}</details>` : ''}
-    <div class="t">นัด${r.mineOnly ? 'ของ ' + esc(r.mineOnly) : ''} ${new Date(apptDate + 'T12:00:00').toLocaleDateString('th-TH', {weekday: 'long', day: 'numeric', month: 'short'})} (${r.list.length})</div>
-    ${r.list.length ? (r.mineOnly ? r.units.filter(u => byUnit(u).length) : r.units).map(u => `<div class="s" style="margin-top:4px"><b>${esc(u)}</b> · ${byUnit(u).length} นัด</div>${byUnit(u).map(card).join('') || '<div class="card s">ว่างทั้งวัน</div>'}`).join('') : '<div class="card center">ยังไม่มีนัดวันนี้</div>'}
     <p class="note">ปฏิทิน "นัดคนไข้ Smile Art" อัปเดตตามเมนูนี้อัตโนมัติ ห้ามแก้ในปฏิทินตรงๆ</p>`;
 
   apPrev.onclick = () => shift(-1); apNext.onclick = () => shift(1);
@@ -2268,6 +2275,19 @@ async function viewAppt(note) {
     apptDate = afDate.value; await viewAppt('ลงนัดแล้ว และลงปฏิทินให้แล้ว' + cfNote(res.confirm) + (res.warn ? ' · หมายเหตุ: ' + res.warn : ''));
   };
   app.querySelectorAll('[data-ap]').forEach(el => el.addEventListener('click', e => { if (e.target.closest('button,a,input,select,textarea,form,.apBox')) return; viewVisit(el.dataset.ap); }));
+  // v62 ปุ่มบนการ์ด: มาแล้ว → หน้าการมาวันนี้ (งาน รายรับ นัดต่อ) · นัดใหม่ → หน้าเดียวกันที่ส่วนนัด · ไม่มา → เข้าคิวรอนัดใหม่ (แตะ 2 ครั้ง)
+  app.querySelectorAll('[data-qa]').forEach(b => b.onclick = async () => {
+    const el = b.closest('[data-ap]'), id = el.dataset.ap, a = r.list.find(x => x.id === id) || {};
+    if (b.dataset.qa === 'come') return viewVisit(id, null, { arrival: a.status === 'นัดแล้ว' ? 'มาแล้ว' : '' });
+    if (b.dataset.qa === 'new') return viewVisit(id, null, { plan: ['มาแล้ว', 'เสร็จ'].includes(a.status) ? 'next' : 'move' });
+    if (!b.dataset.sure) { b.dataset.sure = '1'; b.textContent = 'แตะอีกครั้ง ยืนยันไม่มา'; b.classList.remove('ghost'); setTimeout(() => { if (b.isConnected) { delete b.dataset.sure; b.textContent = 'ไม่มา'; b.classList.add('ghost'); } }, 4000); return; }
+    b.disabled = true; b.textContent = 'กำลังบันทึก…';
+    const s1 = await call('apptStatus', { id, status: 'ไม่มา' });
+    if (!s1.ok) { b.disabled = false; b.textContent = 'ไม่มา'; return flash(errMore(s1)); }
+    const s2 = await call('apptPostpone', { id, followDate: todayISO(), reason: 'ไม่มาตามนัด' });
+    if (!s2.ok) return viewAppt('บันทึก "ไม่มา" แล้ว แต่ใส่คิวรอนัดใหม่ไม่ได้: ' + errMore(s2));
+    viewAppt('บันทึกแล้ว: ' + (a.nick || '') + ' ไม่มา · อยู่ในคิว "รอนัดใหม่" ให้เคาน์เตอร์โทรนัด');
+  });
   app.querySelectorAll('[data-ap]').forEach(cardEl => {
     const id = cardEl.dataset.ap, box = cardEl.querySelector('.apBox'), a = r.list.find(x => x.id === id);
     cardEl.querySelectorAll('[data-st]').forEach(b => b.onclick = () => batchAdd(cardEl, (a ? a.nick + ' ' : '') + b.dataset.st, () => call('apptStatus', {id, status: b.dataset.st})));
