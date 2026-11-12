@@ -499,7 +499,7 @@ async function viewStock() {
   const host = document.createElement('div'); host.id = 'depHost'; app.appendChild(host); depSection(host);
 }
 
-let stockMode = 'job', stockCatSel = '', stockCat = 'ทั้งหมด', stockReserved = {}, stockPath = [], stockGroups = [], stockUnits = [], stockEdit = '', stockSel = null, stockCond = '';
+let stockCat = 'ทั้งหมด', stockReserved = {}, stockPath = [], stockGroups = [], stockUnits = [], stockEdit = '', stockSel = null, stockCond = '';
 const SEP = ' › ';
 // สต็อกเป็นชั้น v18: เส้นทางยืดหยุ่น (งาน › วัสดุ/อุปกรณ์ › หมวด › ยี่ห้อ › …) · กด + เพิ่มได้ทุกชั้น
 const JOB_ORDER = ['งานศัลยกรรม', 'งานอุดฟัน / ความงาม', 'งานครอบ / สะพาน / วีเนียร์', 'งานรักษาราก', 'งานจัดฟัน', 'งานฟันปลอมถอดได้', 'แล็บ', 'ใช้ร่วมทุกงาน', 'ของขาย', 'ยังไม่จัดหมวด'];
@@ -515,12 +515,6 @@ function allGroupPaths() {
   const addP = p => { const parts = p.split(SEP); for (let k = 1; k <= parts.length; k++) set.add(parts.slice(0, k).join(SEP)); };
   stockItems.forEach(i => i.path && addP(i.path)); stockGroups.forEach(addP);
   return [...set].sort((a, b) => a.localeCompare(b, 'th'));
-}
-// v65 ดูตามหมวด: หมวด = ชั้นถัดจาก วัสดุ/อุปกรณ์ (ไม่มี = ชั้นแรก)
-function stockCatOf(i) {
-  const parts = String(i.path || '').split(SEP).filter(Boolean);
-  if (parts.length >= 3 && (parts[1] === 'วัสดุ' || parts[1] === 'อุปกรณ์')) return parts[2];
-  return parts[0] || 'ยังไม่จัดหมวด';
 }
 function renderStock(q) {
   const P = stockPath, cur = P.join(SEP);
@@ -542,7 +536,7 @@ function renderStock(q) {
       <div class="cats">${['ชำรุด', 'รอส่งซ่อม', 'ส่งซ่อมแล้ว', 'ใช้ได้'].map(x => `<button type="button" data-cdset="${esc(x)}" aria-pressed="${x === (cond || 'ใช้ได้')}">${x === 'ใช้ได้' ? '✓ ใช้ได้แล้ว' : esc(x)}</button>`).join('')}</div></div>` : '';
     if (stockSel) return `<label class="row" style="cursor:pointer;gap:10px"><input type="checkbox" data-sel="${code}" ${stockSel.has(i['รหัสสินค้า']) ? 'checked' : ''} style="width:22px;height:22px;flex:none">
       <div class="grow"><div class="t">${esc(i['ชื่อสินค้า'])}</div>${sub}</div></label>`;
-    return `<div class="row" style="flex-wrap:wrap${cond ? ';border-left:4px solid var(--bad)' : ''}"><div class="grow"><div class="t">${esc(i['ชื่อสินค้า'])}${cond ? ` <span class="pill" style="background:var(--badbg);color:var(--bad)">🔧 ${esc(cond)}</span>` : ''}</div>${q || stockMode === 'cat' ? `<div class="s" style="font-size:12px">${esc(i.path)}</div>` : ''}${sub}
+    return `<div class="row" style="flex-wrap:wrap${cond ? ';border-left:4px solid var(--bad)' : ''}"><div class="grow"><div class="t">${esc(i['ชื่อสินค้า'])}${cond ? ` <span class="pill" style="background:var(--badbg);color:var(--bad)">🔧 ${esc(cond)}</span>` : ''}</div>${q ? `<div class="s" style="font-size:12px">${esc(i.path)}</div>` : ''}${sub}
       ${cond && i['หมายเหตุสภาพ'] ? `<div class="s bad" style="font-size:12px">${esc(i['หมายเหตุสภาพ'])}</div>` : ''}
       <div class="s" style="font-size:11px">${fmtUp(i.updated)}</div></div>
       <div style="display:flex;gap:6px;flex-wrap:wrap;width:100%;justify-content:flex-end">${equip || cond ? `<button class="btn ghost small" data-cond="${code}" style="${cond ? 'color:var(--bad)' : ''}">${cond ? 'สภาพ' : 'แจ้งเสีย'}</button>` : ''}<button class="btn ghost small" data-iedit="${code}" aria-label="แก้">✎</button>
@@ -567,19 +561,6 @@ function renderStock(q) {
     const ql = q.toLowerCase();
     const items = stockItems.filter(i => [i['ชื่อสินค้า'], i['รหัสสินค้า'], i.path].some(x => String(x).toLowerCase().includes(ql)));
     body = items.length ? `<div class="list">${items.map(row).join('')}</div>` : '<div class="card s">ไม่พบรายการ</div>';
-  } else if (stockMode === 'cat') {
-    const cats = {};
-    stockItems.forEach(i => { const c = stockCatOf(i); (cats[c] = cats[c] || []).push(i); });
-    if (stockCatSel && cats[stockCatSel]) {
-      const list = cats[stockCatSel].slice().sort((a, b) => String(a['ชื่อสินค้า']).localeCompare(String(b['ชื่อสินค้า']), 'th'));
-      crumbs = `<div class="cats" style="margin:8px 0;flex-wrap:wrap;overflow:visible"><button type="button" data-catsel="" aria-pressed="false">ทุกหมวด</button><button type="button" aria-pressed="true">${esc(stockCatSel)}</button></div>`;
-      body = `<div class="list">${list.map(row).join('')}</div>`;
-    } else {
-      stockCatSel = '';
-      const names = Object.keys(cats).sort((a, b) => a.localeCompare(b, 'th'));
-      body = `<div class="list">${names.map(c => { const list = cats[c], low = list.filter(i => stockState(i).low).length, exp = list.filter(i => stockState(i).expSoon).length;
-        return `<div class="row" data-catsel="${esc(c)}" style="cursor:pointer"><div class="grow"><div class="t">${esc(c)}</div><div class="s">${list.length} รายการ${low ? ` · <span class="warn">ใกล้หมด ${low}</span>` : ''}${exp ? ` · <span class="bad">ใกล้หมดอายุ ${exp}</span>` : ''}</div></div><span class="s" style="padding:0 6px">›</span></div>`; }).join('')}</div>`;
-    }
   } else {
     const kids = new Set();
     allGroupPaths().forEach(p => { if (cur ? p.startsWith(cur + SEP) && p.split(SEP).length === P.length + 1 : p.split(SEP).length === 1) kids.add(p.split(SEP).pop()); });
@@ -604,7 +585,6 @@ function renderStock(q) {
     <button class="btn small" id="mvGo" type="button" ${stockSel.size ? '' : 'disabled'}>ย้าย</button></div></div>` : '';
   app.innerHTML = `
     <div><label for="q">ค้นหาวัสดุ</label><input id="q" type="search" value="${esc(q)}" placeholder="ชื่อ รหัส ยี่ห้อ หรือกลุ่ม"></div>
-    ${q ? '' : `<div class="cats" style="margin-top:8px"><button type="button" data-smode="job" aria-pressed="${stockMode === 'job'}">ดูตามงาน</button><button type="button" data-smode="cat" aria-pressed="${stockMode === 'cat'}">ดูตามหมวด</button></div>`}
     <div id="m"></div>${brokenBox}${crumbs}${body}${selBar}`;
   const sm = document.getElementById('selMode'); if (sm) sm.onclick = () => { stockSel = stockSel ? null : new Set(); renderStock(q); };
   app.querySelectorAll('[data-sel]').forEach(cb => cb.onchange = () => { cb.checked ? stockSel.add(cb.dataset.sel) : stockSel.delete(cb.dataset.sel); renderStock(q); });
@@ -625,8 +605,6 @@ function renderStock(q) {
   const qi = document.getElementById('q');
   qi.oninput = () => { const v = qi.value; renderStock(v); const n = document.getElementById('q'); n.focus(); n.setSelectionRange(v.length, v.length); };
   app.querySelectorAll('[data-go]').forEach(el => el.onclick = () => { stockPath = [...P, el.dataset.go]; stockEdit = ''; stockSel = null; renderStock(''); scrollTo(0, 0); });
-  app.querySelectorAll('[data-smode]').forEach(b => b.onclick = () => { stockMode = b.dataset.smode; stockCatSel = ''; stockEdit = ''; stockSel = null; renderStock(''); scrollTo(0, 0); });
-  app.querySelectorAll('[data-catsel]').forEach(el => el.onclick = () => { stockCatSel = el.dataset.catsel; stockEdit = ''; renderStock(''); scrollTo(0, 0); });
   app.querySelectorAll('[data-up]').forEach(b => b.onclick = () => { stockPath = P.slice(0, +b.dataset.up); stockEdit = ''; stockSel = null; renderStock(''); });
   app.querySelectorAll('button[data-code]').forEach(b => b.onclick = () => moveForm(b));
   app.querySelectorAll('[data-tobuy]').forEach(b => b.onclick = () => toBuyQuick(b));
@@ -2536,7 +2514,21 @@ async function viewDaily2(note) {
       <div style="display:flex;gap:8px;align-items:flex-end"><div class="grow"><label for="rpDate">วันที่</label><input id="rpDate" type="date" value="${todayISO()}"></div><button class="btn" id="rpBtn" type="button">ดูวัน</button></div>
       <div style="display:flex;gap:8px;align-items:flex-end"><div class="grow"><label for="rpMonth">เดือน (รายได้ · DF · รายจ่าย)</label><input id="rpMonth" type="month" value="${todayISO().slice(0, 7)}"></div><button class="btn" id="rmBtn" type="button">ดูเดือน</button></div>
       <div id="rpOut"></div></div>` : ''}
-    <details class="card" open><summary class="t" style="cursor:pointer">+ ลงรายรับ (คนไข้ 1 คน ลงได้หลายรายการ)</summary>
+    <!-- v65 ชั้นบนสุด: ยอดวันนี้ → คนไข้ที่มาแล้วยังไม่ลงเงิน (กดแล้วไปหน้าการมาของคนไข้ ไม่ต้องกรอกซ้ำ) → รายการ → ลงรายรับคนไม่มีนัด -->
+    <div class="card"><div class="t">วันนี้ ${Object.keys(bills).length} คน · ${baht(sum.total)} บาท</div>
+      <div class="s">สด ${baht(sum.cash)} · โอน ${baht(sum.transfer)} · บัตร ${baht(sum.card)}</div></div>
+    <div id="dAppt"></div>
+    <details class="card"><summary class="t" style="cursor:pointer">รายการรับเงินวันนี้ (${Object.keys(bills).length})</summary>
+    <div class="list">${Object.values(bills).map(b => `<div class="row" style="flex-wrap:wrap"><div class="grow">
+      <div class="t">${esc(b.dn ? b.dn + ' ' : '')}${esc(b.nick)} · ${baht(b.total)}</div>
+      ${b.items.map(x => `<div class="s">${esc(x.type || 'รักษา')} · ${esc(x.treat)} · ${esc(x.doctor)} · ${baht(x.total)}</div>`).join('')}
+      <div class="s">${[b.cash && 'สด ' + baht(b.cash), b.transfer && 'โอน ' + baht(b.transfer), b.card && 'บัตร ' + baht(b.card)].filter(Boolean).join(' · ')} · โดย ${esc(b.by)}</div>
+      ${b.wait ? '<div class="s bad">ยังไม่แนบสลิป</div>' : ''}</div>
+      ${b.wait ? `<button class="btn small" data-slip2="${esc(b.key)}">แนบสลิป</button>` : ''}
+      <button class="btn ghost small" data-cancel2="${esc(b.items.map(x => x.id).join(','))}">ยกเลิก</button><div class="xBox" style="width:100%"></div></div>`).join('') || '<div class="row s">ยังไม่มีรายการ</div>'}</div>
+    </details>
+    <details class="card"><summary class="t" style="cursor:pointer">+ ลงรายรับ คนไข้ที่ไม่มีนัด / ขายของ</summary>
+      <p class="s">คนไข้ที่มีนัดวันนี้ ให้ลงเงินจากรายการ "มาแล้ว ยังไม่ลงเงิน" ด้านบน จะได้ไม่ลงซ้ำ</p>
       <form id="bf2">
         <label for="dDn">DN (ถ้ามี)</label><input id="dDn" list="pts2" placeholder="เช่น 690176">
         <datalist id="pts2">${r.patients.map(p => `<option value="${esc(p.dn)}">${esc(p.nick)}</option>`).join('')}</datalist>
@@ -2555,21 +2547,23 @@ async function viewDaily2(note) {
         <label for="dNote">หมายเหตุ</label><input id="dNote">
         <button class="btn" type="submit" style="width:100%;margin-top:10px">บันทึก</button>
       </form></details>
-    <div class="t">วันนี้ ${Object.keys(bills).length} คน · ${baht(sum.total)} บาท</div>
-    <div class="s">สด ${baht(sum.cash)} · โอน ${baht(sum.transfer)} · บัตร ${baht(sum.card)}</div>
-    <div class="list">${Object.values(bills).map(b => `<div class="row" style="flex-wrap:wrap"><div class="grow">
-      <div class="t">${esc(b.dn ? b.dn + ' ' : '')}${esc(b.nick)} · ${baht(b.total)}</div>
-      ${b.items.map(x => `<div class="s">${esc(x.type || 'รักษา')} · ${esc(x.treat)} · ${esc(x.doctor)} · ${baht(x.total)}</div>`).join('')}
-      <div class="s">${[b.cash && 'สด ' + baht(b.cash), b.transfer && 'โอน ' + baht(b.transfer), b.card && 'บัตร ' + baht(b.card)].filter(Boolean).join(' · ')} · โดย ${esc(b.by)}</div>
-      ${b.wait ? '<div class="s bad">ยังไม่แนบสลิป</div>' : ''}</div>
-      ${b.wait ? `<button class="btn small" data-slip2="${esc(b.key)}">แนบสลิป</button>` : ''}
-      <button class="btn ghost small" data-cancel2="${esc(b.items.map(x => x.id).join(','))}">ยกเลิก</button><div class="xBox" style="width:100%"></div></div>`).join('') || '<div class="row s">ยังไม่มีรายการ</div>'}</div>
     <div class="card"><div class="t">ปิดยอดสิ้นวัน</div>
       ${r.closeInfo ? `<p class="s">ปิดยอดแล้ว เงินสด ${baht(r.closeInfo.cash)}${r.closeInfo.received ? ' · หมอรับแล้ว' : ' · รอหมอรับ'} (ปิดซ้ำได้ถ้านับใหม่)</p>` : '<p class="s">นับเงินสดทั้งหมดแล้วส่งหมอ · ถ้ามีรูดบัตร แนบสลิปปิดยอดบัตร (Settlement)</p>'}
       <form id="cl2"><label for="clAmt2">เงินสดที่นับได้ (ระบบ ${baht(sum.cash)})</label><input id="clAmt2" type="number" inputmode="decimal" required>
         ${sum.card > 0 ? `<label>สลิปปิดยอดบัตร (ระบบ ${baht(sum.card)})</label><input id="clCardPh" type="file" accept="image/*"><label for="clCard">ยอดตามสลิปบัตร</label><input id="clCard" type="number" inputmode="decimal" value="${sum.card}">` : ''}
         <button class="btn" type="submit" style="width:100%;margin-top:8px">ปิดยอด</button></form></div>`;
 
+  // v65 คนไข้มีนัดที่มาแล้ว: ลงเงินแล้วหรือยัง · กดแล้วเปิดหน้าการมาของคนไข้ (งาน · เงิน · นัดต่อ ที่เดียว)
+  if (smaCan('appt')) call('apptDay', { date: todayISO() }).then(ad => {
+    const box = document.getElementById('dAppt'); if (!box || !ad.ok) return;
+    const paidKey = new Set(r.list.flatMap(x => [x.dn && 'D' + x.dn, x.nick && 'N' + x.nick]).filter(Boolean));
+    const came = (ad.list || []).filter(a => ['มาแล้ว', 'เสร็จ'].includes(a.status)).map(a => Object.assign(a, { paid: !!a.payStatus || paidKey.has('D' + a.dn) || (!a.dn && paidKey.has('N' + a.nick)) }));
+    const todo = came.filter(a => !a.paid), waiting = (ad.list || []).filter(a => a.status === 'นัดแล้ว').length;
+    box.innerHTML = `<div class="card"><div class="t">มาแล้ว ยังไม่ลงเงิน (${todo.length})</div>
+      ${todo.map(a => `<div class="row"><div class="grow"><div class="t">${esc(a.start)} · ${esc(a.dn ? a.dn + ' ' : '')}${esc(a.nick)}</div><div class="s">${esc(a.work)} · ${esc(a.doctor)}</div></div><button type="button" class="btn small" data-dvisit="${esc(a.id)}">ลงเงิน</button></div>`).join('') || '<div class="s">✓ คนไข้ที่มาแล้วลงเงินครบ</div>'}
+      <div class="s" style="margin-top:6px">ลงเงินแล้ว ${came.length - todo.length} คน · ยังไม่มา ${waiting} นัด</div></div>`;
+    box.querySelectorAll('[data-dvisit]').forEach(b => b.onclick = () => { smaDock('appt'); viewVisit(b.dataset.dvisit); });
+  });
   const items = document.getElementById('items');
   const totalOf = () => [...items.querySelectorAll('.iAmt')].reduce((n, i) => n + num2(i.value), 0);
   const upd = () => {
@@ -2913,12 +2907,13 @@ async function viewDF(note, month) {
   app.innerHTML = '<div class="center">กำลังคำนวณ DF…</div>';
   const r = await call('dfHome', { month });
   if (!r.ok) return showError(r.error === 'not_doctor' ? 'เมนูนี้สำหรับหมอ (ให้หมอเดียร์ผูกชื่อเล่นกับชื่อหมอใน Settings → DOCTOR_STAFF)' : 'โหลดไม่ได้: ' + r.error);
-  const detail = (L) => `<details><summary class="s" style="cursor:pointer">รายรับ ${L.income.length} รายการ</summary>${L.income.map(x => `<div class="s">${esc(x.date)} · ${esc(x.dn)} ${esc(x.nick)} · ${esc(x.type)} ${esc(x.treat)} · ${baht(x.amount)}</div>`).join('')}</details>
+  const detail = (L) => `<details><summary class="s" style="cursor:pointer">รายรับ ${L.income.length} รายการ</summary>${L.income.map(x => `<div class="s">${esc(x.date)} · ${esc(x.dn)} ${esc(x.nick)} · ${esc(x.type)} ${esc(x.treat)} · ${baht(x.amount)}${x.cat ? ` · ${esc(x.cat)} ${x.pct}% = ${baht(x.preDf)}${x.cardFee ? ' (บัตร −' + baht(x.cardFee) + ')' : ''}` : ''}</div>`).join('')}</details>
     <details><summary class="s" style="cursor:pointer">ค่าแล็บ ${L.lab.length} รายการ</summary>${L.lab.map(x => `<div class="s">${esc(x.date)} · ${esc(x.lab)} · ${esc(x.patient)} · ${baht(x.amount)}</div>`).join('') || '<div class="s">-</div>'}</details>
     <details><summary class="s" style="cursor:pointer">ค่าของ ${L.material.length} รายการ</summary>${L.material.map(x => `<div class="s">${esc(x.date)} · ${esc(x.code)} × ${esc(x.qty)} · เคส ${esc(x.caseId)} · ${baht(x.amount)}</div>`).join('') || '<div class="s">-</div>'}</details>`;
-  const line = x => x.partner ? `ส่วนแบ่งเครื่องเอกซเรย์: X-ray ทั้งเดือน ${baht(x.xray)} × ${x.partnerPct}%` : `รับ ${baht(x.revenue)} − แล็บ ${baht(x.lab)} − ของ ${baht(x.material)} = ${baht(x.net)} × ${r.data?.pct ?? r.pct}%${x.xray ? ' + X-ray ' + baht(x.xray) + ' × ' + (r.data?.xpct ?? r.xpct) + '%' : ''}`;
+  const line = x => x.partner ? `ส่วนแบ่งเครื่องเอกซเรย์: X-ray ทั้งเดือน ${baht(x.xray)} × ${x.partnerPct}%` : x.preDf !== undefined ? `Pre DF ${baht(x.preDf)} (แยกตามหมวดงาน) − ค่าบัตร ${baht(x.cardFee)} − แล็บ ${baht(x.labDeduct)} − ของ ${baht(x.materialDeduct)} = <b>${baht(x.df)}</b>` : x.partner ? `ส่วนแบ่งเครื่องเอกซเรย์: X-ray ทั้งเดือน ${baht(x.xray)} × ${x.partnerPct}%` : `รับ ${baht(x.revenue)} − แล็บ ${baht(x.lab)} − ของ ${baht(x.material)} = ${baht(x.net)} × ${r.data?.pct ?? r.pct}%${x.xray ? ' + X-ray ' + baht(x.xray) + ' × ' + (r.data?.xpct ?? r.xpct) + '%' : ''}`;
   app.innerHTML = `<div id="m">${note ? `<div class="msg ok">${esc(note)}</div>` : ''}</div>
-    <div class="card"><label for="dfM">เดือน</label><input id="dfM" type="month" value="${esc(month)}"></div>
+    <div class="card"><label for="dfM">เดือน</label><input id="dfM" type="month" value="${esc(month)}">
+      ${r.owner ? '<button class="btn ghost small" id="dfExp" type="button" style="margin-top:8px">สร้างไฟล์ DF รายหมอ + บิลแล็บรายแล็บ ใน Drive</button><div class="s" id="dfExpOut"></div>' : ''}</div>
     ${r.owner ? r.data.df.map(x => { const lg = r.log.find(l => l.doctor === x.doctor); return `<div class="card" data-doc="${esc(x.doctor)}"><div class="t">${esc(x.doctor)} · DF ${baht(x.df)} บาท</div>
       <div class="s">${line(x)}</div>${lg ? `<div class="s ${lg.status === 'ทักท้วง' ? 'bad' : ''}">สถานะ: ${esc(lg.status)}${lg.note ? ' · ' + esc(lg.note) : ''}${lg.paid ? ' · จ่าย ' + esc(lg.paid) : ''}</div>` : ''}
       ${detail(r.data.lines[x.doctor])}
@@ -2929,6 +2924,13 @@ async function viewDF(note, month) {
       ${detail(r.lines)}
       ${r.log[0] && r.log[0].status === 'ส่งให้ตรวจ' ? `<div class="labact"><button class="btn small" id="dfOk">ยืนยันยอดถูกต้อง</button><button class="btn ghost small" id="dfNo">ทักท้วง</button></div>` : ''}</div>`}`;
   dfM.onchange = () => viewDF('', dfM.value);
+  const dfExp = document.getElementById('dfExp');   // v66
+  if (dfExp) dfExp.onclick = async () => { dfExp.disabled = true; dfExp.textContent = 'กำลังสร้างไฟล์…';
+    const res = await call('dfExport', { month }); dfExp.disabled = false; dfExp.textContent = 'สร้างไฟล์อีกครั้ง (ทับของเดือนเดิม)';
+    if (!res.ok) return flash(errV2(res));
+    document.getElementById('dfExpOut').innerHTML = `<a href="${esc(res.folderDf)}" target="_blank" rel="noopener">โฟลเดอร์ DF หมอ</a> · <a href="${esc(res.folderLab)}" target="_blank" rel="noopener">โฟลเดอร์งานแล็บ</a><br>`
+      + res.doctors.map(d => `<a href="${esc(d.url)}" target="_blank" rel="noopener">DF ${esc(d.doctor)}</a> ${baht(d.df)}`).join(' · ')
+      + (res.labs.length ? '<br>' + res.labs.map(l => `<a href="${esc(l.url)}" target="_blank" rel="noopener">${esc(l.lab)}</a> ${baht(l.total)}`).join(' · ') : ''); };
   app.querySelectorAll('[data-doc]').forEach(el => {
     const doc = el.dataset.doc, box = el.querySelector('.xBox');
     if (el.querySelector('[data-send]')) el.querySelector('[data-send]').onclick = async () => { const res = await call('dfSend', { month, doctor: doc }); if (!res.ok) return flash(errV2(res)); viewDF('ส่งสรุปให้ ' + doc + ' ทาง LINE แล้ว', month); };
@@ -3141,7 +3143,7 @@ async function viewSmaApproval(kind){
   if(kind==='buy'){await viewBuy();const first=app.querySelector('[data-dec]');let target=first?.closest('.list');if(!target){target=document.createElement('div');target.className='card';target.textContent='ไม่มีรายการซื้อของรออนุมัติ';app.prepend(target);}target.scrollIntoView({block:'start'});}
   else {await viewTeam();document.getElementById('pend')?.scrollIntoView({block:'start'});}
 }
-async function viewSmaLabStock(){stockMode='job';stockPath=[];stockEdit='';stockSel=null;stockCond='';await viewStock();if(allGroupPaths().some(p=>p==='แล็บ'||p.startsWith('แล็บ'+SEP))){stockPath=['แล็บ'];renderStock('');}else app.insertAdjacentHTML('afterbegin','<div class="sma-note">วัสดุแล็บ · ยังไม่ได้แยกหมวดแล็บในสต็อก เลือกหรือค้นหาจากสต็อกเดิมด้านล่างได้</div>');}
+async function viewSmaLabStock(){stockPath=[];stockEdit='';stockSel=null;stockCond='';await viewStock();if(allGroupPaths().some(p=>p==='แล็บ'||p.startsWith('แล็บ'+SEP))){stockPath=['แล็บ'];renderStock('');}else app.insertAdjacentHTML('afterbegin','<div class="sma-note">วัสดุแล็บ · ยังไม่ได้แยกหมวดแล็บในสต็อก เลือกหรือค้นหาจากสต็อกเดิมด้านล่างได้</div>');}
 let smaPhotoLab='';
 async function viewSmaLabPhotos(){
   app.innerHTML='<div class="center">กำลังโหลดรูปงานแล็บ…</div>';
