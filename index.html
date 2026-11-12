@@ -499,7 +499,7 @@ async function viewStock() {
   const host = document.createElement('div'); host.id = 'depHost'; app.appendChild(host); depSection(host);
 }
 
-let stockCat = 'ทั้งหมด', stockReserved = {}, stockPath = [], stockGroups = [], stockUnits = [], stockEdit = '', stockSel = null, stockCond = '';
+let stockMode = 'job', stockCatSel = '', stockCat = 'ทั้งหมด', stockReserved = {}, stockPath = [], stockGroups = [], stockUnits = [], stockEdit = '', stockSel = null, stockCond = '';
 const SEP = ' › ';
 // สต็อกเป็นชั้น v18: เส้นทางยืดหยุ่น (งาน › วัสดุ/อุปกรณ์ › หมวด › ยี่ห้อ › …) · กด + เพิ่มได้ทุกชั้น
 const JOB_ORDER = ['งานศัลยกรรม', 'งานอุดฟัน / ความงาม', 'งานครอบ / สะพาน / วีเนียร์', 'งานรักษาราก', 'งานจัดฟัน', 'งานฟันปลอมถอดได้', 'แล็บ', 'ใช้ร่วมทุกงาน', 'ของขาย', 'ยังไม่จัดหมวด'];
@@ -515,6 +515,12 @@ function allGroupPaths() {
   const addP = p => { const parts = p.split(SEP); for (let k = 1; k <= parts.length; k++) set.add(parts.slice(0, k).join(SEP)); };
   stockItems.forEach(i => i.path && addP(i.path)); stockGroups.forEach(addP);
   return [...set].sort((a, b) => a.localeCompare(b, 'th'));
+}
+// v65 ดูตามหมวด: หมวด = ชั้นถัดจาก วัสดุ/อุปกรณ์ (ไม่มี = ชั้นแรก)
+function stockCatOf(i) {
+  const parts = String(i.path || '').split(SEP).filter(Boolean);
+  if (parts.length >= 3 && (parts[1] === 'วัสดุ' || parts[1] === 'อุปกรณ์')) return parts[2];
+  return parts[0] || 'ยังไม่จัดหมวด';
 }
 function renderStock(q) {
   const P = stockPath, cur = P.join(SEP);
@@ -536,7 +542,7 @@ function renderStock(q) {
       <div class="cats">${['ชำรุด', 'รอส่งซ่อม', 'ส่งซ่อมแล้ว', 'ใช้ได้'].map(x => `<button type="button" data-cdset="${esc(x)}" aria-pressed="${x === (cond || 'ใช้ได้')}">${x === 'ใช้ได้' ? '✓ ใช้ได้แล้ว' : esc(x)}</button>`).join('')}</div></div>` : '';
     if (stockSel) return `<label class="row" style="cursor:pointer;gap:10px"><input type="checkbox" data-sel="${code}" ${stockSel.has(i['รหัสสินค้า']) ? 'checked' : ''} style="width:22px;height:22px;flex:none">
       <div class="grow"><div class="t">${esc(i['ชื่อสินค้า'])}</div>${sub}</div></label>`;
-    return `<div class="row" style="flex-wrap:wrap${cond ? ';border-left:4px solid var(--bad)' : ''}"><div class="grow"><div class="t">${esc(i['ชื่อสินค้า'])}${cond ? ` <span class="pill" style="background:var(--badbg);color:var(--bad)">🔧 ${esc(cond)}</span>` : ''}</div>${q ? `<div class="s" style="font-size:12px">${esc(i.path)}</div>` : ''}${sub}
+    return `<div class="row" style="flex-wrap:wrap${cond ? ';border-left:4px solid var(--bad)' : ''}"><div class="grow"><div class="t">${esc(i['ชื่อสินค้า'])}${cond ? ` <span class="pill" style="background:var(--badbg);color:var(--bad)">🔧 ${esc(cond)}</span>` : ''}</div>${q || stockMode === 'cat' ? `<div class="s" style="font-size:12px">${esc(i.path)}</div>` : ''}${sub}
       ${cond && i['หมายเหตุสภาพ'] ? `<div class="s bad" style="font-size:12px">${esc(i['หมายเหตุสภาพ'])}</div>` : ''}
       <div class="s" style="font-size:11px">${fmtUp(i.updated)}</div></div>
       <div style="display:flex;gap:6px;flex-wrap:wrap;width:100%;justify-content:flex-end">${equip || cond ? `<button class="btn ghost small" data-cond="${code}" style="${cond ? 'color:var(--bad)' : ''}">${cond ? 'สภาพ' : 'แจ้งเสีย'}</button>` : ''}<button class="btn ghost small" data-iedit="${code}" aria-label="แก้">✎</button>
@@ -561,6 +567,19 @@ function renderStock(q) {
     const ql = q.toLowerCase();
     const items = stockItems.filter(i => [i['ชื่อสินค้า'], i['รหัสสินค้า'], i.path].some(x => String(x).toLowerCase().includes(ql)));
     body = items.length ? `<div class="list">${items.map(row).join('')}</div>` : '<div class="card s">ไม่พบรายการ</div>';
+  } else if (stockMode === 'cat') {
+    const cats = {};
+    stockItems.forEach(i => { const c = stockCatOf(i); (cats[c] = cats[c] || []).push(i); });
+    if (stockCatSel && cats[stockCatSel]) {
+      const list = cats[stockCatSel].slice().sort((a, b) => String(a['ชื่อสินค้า']).localeCompare(String(b['ชื่อสินค้า']), 'th'));
+      crumbs = `<div class="cats" style="margin:8px 0;flex-wrap:wrap;overflow:visible"><button type="button" data-catsel="" aria-pressed="false">ทุกหมวด</button><button type="button" aria-pressed="true">${esc(stockCatSel)}</button></div>`;
+      body = `<div class="list">${list.map(row).join('')}</div>`;
+    } else {
+      stockCatSel = '';
+      const names = Object.keys(cats).sort((a, b) => a.localeCompare(b, 'th'));
+      body = `<div class="list">${names.map(c => { const list = cats[c], low = list.filter(i => stockState(i).low).length, exp = list.filter(i => stockState(i).expSoon).length;
+        return `<div class="row" data-catsel="${esc(c)}" style="cursor:pointer"><div class="grow"><div class="t">${esc(c)}</div><div class="s">${list.length} รายการ${low ? ` · <span class="warn">ใกล้หมด ${low}</span>` : ''}${exp ? ` · <span class="bad">ใกล้หมดอายุ ${exp}</span>` : ''}</div></div><span class="s" style="padding:0 6px">›</span></div>`; }).join('')}</div>`;
+    }
   } else {
     const kids = new Set();
     allGroupPaths().forEach(p => { if (cur ? p.startsWith(cur + SEP) && p.split(SEP).length === P.length + 1 : p.split(SEP).length === 1) kids.add(p.split(SEP).pop()); });
@@ -585,6 +604,7 @@ function renderStock(q) {
     <button class="btn small" id="mvGo" type="button" ${stockSel.size ? '' : 'disabled'}>ย้าย</button></div></div>` : '';
   app.innerHTML = `
     <div><label for="q">ค้นหาวัสดุ</label><input id="q" type="search" value="${esc(q)}" placeholder="ชื่อ รหัส ยี่ห้อ หรือกลุ่ม"></div>
+    ${q ? '' : `<div class="cats" style="margin-top:8px"><button type="button" data-smode="job" aria-pressed="${stockMode === 'job'}">ดูตามงาน</button><button type="button" data-smode="cat" aria-pressed="${stockMode === 'cat'}">ดูตามหมวด</button></div>`}
     <div id="m"></div>${brokenBox}${crumbs}${body}${selBar}`;
   const sm = document.getElementById('selMode'); if (sm) sm.onclick = () => { stockSel = stockSel ? null : new Set(); renderStock(q); };
   app.querySelectorAll('[data-sel]').forEach(cb => cb.onchange = () => { cb.checked ? stockSel.add(cb.dataset.sel) : stockSel.delete(cb.dataset.sel); renderStock(q); });
@@ -605,6 +625,8 @@ function renderStock(q) {
   const qi = document.getElementById('q');
   qi.oninput = () => { const v = qi.value; renderStock(v); const n = document.getElementById('q'); n.focus(); n.setSelectionRange(v.length, v.length); };
   app.querySelectorAll('[data-go]').forEach(el => el.onclick = () => { stockPath = [...P, el.dataset.go]; stockEdit = ''; stockSel = null; renderStock(''); scrollTo(0, 0); });
+  app.querySelectorAll('[data-smode]').forEach(b => b.onclick = () => { stockMode = b.dataset.smode; stockCatSel = ''; stockEdit = ''; stockSel = null; renderStock(''); scrollTo(0, 0); });
+  app.querySelectorAll('[data-catsel]').forEach(el => el.onclick = () => { stockCatSel = el.dataset.catsel; stockEdit = ''; renderStock(''); scrollTo(0, 0); });
   app.querySelectorAll('[data-up]').forEach(b => b.onclick = () => { stockPath = P.slice(0, +b.dataset.up); stockEdit = ''; stockSel = null; renderStock(''); });
   app.querySelectorAll('button[data-code]').forEach(b => b.onclick = () => moveForm(b));
   app.querySelectorAll('[data-tobuy]').forEach(b => b.onclick = () => toBuyQuick(b));
@@ -3119,7 +3141,7 @@ async function viewSmaApproval(kind){
   if(kind==='buy'){await viewBuy();const first=app.querySelector('[data-dec]');let target=first?.closest('.list');if(!target){target=document.createElement('div');target.className='card';target.textContent='ไม่มีรายการซื้อของรออนุมัติ';app.prepend(target);}target.scrollIntoView({block:'start'});}
   else {await viewTeam();document.getElementById('pend')?.scrollIntoView({block:'start'});}
 }
-async function viewSmaLabStock(){stockPath=[];stockEdit='';stockSel=null;stockCond='';await viewStock();if(allGroupPaths().some(p=>p==='แล็บ'||p.startsWith('แล็บ'+SEP))){stockPath=['แล็บ'];renderStock('');}else app.insertAdjacentHTML('afterbegin','<div class="sma-note">วัสดุแล็บ · ยังไม่ได้แยกหมวดแล็บในสต็อก เลือกหรือค้นหาจากสต็อกเดิมด้านล่างได้</div>');}
+async function viewSmaLabStock(){stockMode='job';stockPath=[];stockEdit='';stockSel=null;stockCond='';await viewStock();if(allGroupPaths().some(p=>p==='แล็บ'||p.startsWith('แล็บ'+SEP))){stockPath=['แล็บ'];renderStock('');}else app.insertAdjacentHTML('afterbegin','<div class="sma-note">วัสดุแล็บ · ยังไม่ได้แยกหมวดแล็บในสต็อก เลือกหรือค้นหาจากสต็อกเดิมด้านล่างได้</div>');}
 let smaPhotoLab='';
 async function viewSmaLabPhotos(){
   app.innerHTML='<div class="center">กำลังโหลดรูปงานแล็บ…</div>';
