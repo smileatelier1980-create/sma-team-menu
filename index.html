@@ -2001,11 +2001,17 @@ async function viewVisit(id, note, preset) {
     r.nextAppt ? `<div class="s">มีนัดครั้งหน้าแล้ว ${esc(r.nextAppt.date)} ${esc(r.nextAppt.start)} · ${esc(r.nextAppt.work)}</div>` : ''
   ].filter(Boolean).join('') || '<div class="s">✓ ไม่มีงานแล็บหรือของที่ต้องรอ</div>';
   // 3 งานวันนี้
-  const work = r.cases.length ? r.cases.map(c => `<div style="margin-top:6px"><div class="t" style="font-size:15px">${esc(c.work)} <span class="s">${esc(c.id)} · ${esc(c.status)}</span></div>
-      ${c.steps.length ? c.steps.map(s => s.surg
+  // v64 ขั้นตอนแก้ได้ทันที: ✎ แก้ชื่อ · ✕ ไม่ทำแล้ว · + เพิ่มขั้น → บันทึกลงเคสเลย (ไม่ต้องรอกดบันทึกรวม)
+  const tools = (c, s) => `<span class="stTools" style="white-space:nowrap"><button type="button" class="btn ghost small" data-sren="${esc(s.id)}" data-case="${esc(c.id)}" title="แก้ชื่อขั้น">✎</button><button type="button" class="btn ghost small" data-sskip="${esc(s.id)}" data-case="${esc(c.id)}" data-sname="${esc(s.name)}" title="ไม่ทำแล้ว">✕</button></span>`;
+  const workHtml = () => r.cases.length ? r.cases.map(c => `<div style="margin-top:6px"><div class="t" style="font-size:15px">${esc(c.work)} <span class="s">${esc(c.id)} · ${esc(c.status)}</span></div>
+      ${c.steps.length ? c.steps.map(s => `<div class="stRow" data-row="${esc(s.id)}"><div class="row" style="align-items:flex-start;gap:6px"><div class="grow">${s.surg
         ? `<div class="row s" style="padding:6px 0">• ${esc(s.name)} <button type="button" class="btn ghost small" data-opencase="${esc(c.id)}">บันทึกของที่ใช้ในหน้าเคส</button></div>`
-        : chk(`data-step="${esc(s.id)}" data-case="${esc(c.id)}" data-sname="${esc(s.name)}"`, esc(s.name) + ' เสร็จวันนี้', s.wait ? 'รอ ' + esc(s.wait) : '') + `<input class="stNote" data-for="${esc(s.id)}" placeholder="หมายเหตุ / ซี่ (ถ้ามี)" hidden style="margin:4px 0 6px">`).join('') : '<div class="s">ไม่มีขั้นที่รอ</div>'}</div>`).join('')
+        : chk(`data-step="${esc(s.id)}" data-case="${esc(c.id)}" data-sname="${esc(s.name)}"`, esc(s.name) + ' เสร็จวันนี้', s.wait ? 'รอ ' + esc(s.wait) : '')}</div>${tools(c, s)}</div>
+        <div class="row stRenBox" data-renfor="${esc(s.id)}" hidden style="gap:6px;margin:4px 0"><input class="grow stRen" value="${esc(s.name)}"><button type="button" class="btn small" data-srensave="${esc(s.id)}" data-case="${esc(c.id)}">บันทึก</button></div>
+        ${s.surg ? '' : `<input class="stNote" data-for="${esc(s.id)}" placeholder="หมายเหตุ / ซี่ (ถ้ามี)" hidden style="margin:4px 0 6px">`}</div>`).join('') : '<div class="s">ยังไม่มีขั้นที่รอ · เพิ่มขั้นด้านล่างแล้วติ๊กได้เลย</div>'}
+      <div class="row" style="gap:6px;margin-top:6px"><input class="grow stNew" data-case="${esc(c.id)}" placeholder="+ เพิ่มขั้น เช่น อุด #36"><button type="button" class="btn ghost small" data-sadd="${esc(c.id)}">เพิ่ม</button></div></div>`).join('')
     : '<div class="s">คนไข้ยังไม่มีเคส (ลงรายรับได้ตามปกติ)</div>';
+  const work = `<div id="vWork">${workHtml()}</div><div class="s ok" id="vWorkMsg" style="margin-top:6px"></div>`;
   // 4 จ่ายเงิน
   const itemRow = (it = {}) => `<div class="vItem" style="display:grid;grid-template-columns:2fr 1.3fr 1fr;gap:4px 6px;margin:6px 0;border-top:1px solid var(--line);padding-top:6px">
       <input class="iTreat" placeholder="งาน" value="${esc(it.treat || '')}"><select class="iDoc">${opts(r.doctors, it.doctor || a.doctor)}</select><input class="iAmt" type="number" inputmode="decimal" placeholder="ยอด" value="${it.amount || ''}">
@@ -2016,7 +2022,10 @@ async function viewVisit(id, note, preset) {
       <div class="s" style="margin-top:4px">งานคอร์ส (มีขั้นตอน · หักยอดคงเหลือ)</div><div class="cats">${chips.course.map(w => `<button type="button" data-chip="${esc(w)}" data-course="1">${esc(w)}${r.cases.some(c => c.course === w) ? ' ✓' : ''}</button>`).join('')}</div>
       <div id="vNewCases"></div>`;
   const firstCase = r.cases.find(c => c.inAppt) || r.cases[0];
-  const pay = !M ? '' : sec(4, 'จ่ายเงิน', `
+  const priced = r.cases.filter(c => c.price);
+  const sumBar = priced.length ? (() => { const t = priced.reduce((n, c) => n + c.price, 0), pd = priced.reduce((n, c) => n + (c.paid || 0), 0);
+    return `<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;text-align:center;margin-bottom:6px"><div class="card" style="margin:0;padding:8px"><div class="s">ราคาเต็ม</div><b>${baht(t)}</b></div><div class="card" style="margin:0;padding:8px"><div class="s">จ่ายแล้ว</div><b>${baht(pd)}</b></div><div class="card" style="margin:0;padding:8px"><div class="s">ค้าง</div><b class="${t - pd > 0 ? 'bad' : ''}">${baht(Math.max(0, t - pd))}</b></div></div>`; })() : '';
+  const pay = !M ? '' : sec(4, 'จ่ายเงิน', `${sumBar}
       ${r.paidToday.length ? `<div class="s"><b>ลงรายรับไว้แล้ววันนี้:</b> ${r.paidToday.map(p => `${esc(p.treat)} ${baht(p.total)}${p.wait ? ' (รอสลิป)' : ''}`).join(' · ')}</div>` : ''}
       ${r.cases.map(c => `<div class="row s" style="padding:4px 0"><span class="grow">${esc(c.work)}: ราคาแผน</span><input class="vPrice" data-case="${esc(c.id)}" type="number" inputmode="decimal" value="${c.price || ''}" placeholder="ใส่ราคา" style="width:110px">
         <span style="min-width:110px;text-align:right">${c.price ? 'จ่ายแล้ว ' + baht(c.paid) + '<br><b>' + (c.balance > 0 ? 'ค้าง ' + baht(c.balance) : 'ครบแล้ว') + '</b>' : 'จ่ายแล้ว ' + baht(c.paid || 0)}</span></div>`).join('')}
@@ -2086,12 +2095,36 @@ async function viewVisit(id, note, preset) {
       $('#vSlipBox').hidden = !(Number($('#vTr').value) > 0); }
   };
   $('#vBack').onclick = () => { if (dirty && !confirm('ยังไม่ได้บันทึก ออกจากหน้านี้?')) return; dirty = false; viewAppt(); };
-  $$('[data-opencase]').forEach(b => b.onclick = () => { if (dirty && !confirm('ยังไม่ได้บันทึก ออกจากหน้านี้?')) return; dirty = false; location.hash = 'cases'; setTimeout(() => viewCase2(b.dataset.opencase), 50); });
+  $$('[data-opencase]').filter(b => !b.closest('#vWork')).forEach(b => b.onclick = () => { if (dirty && !confirm('ยังไม่ได้บันทึก ออกจากหน้านี้?')) return; dirty = false; location.hash = 'cases'; setTimeout(() => viewCase2(b.dataset.opencase), 50); });
   $$('[data-arr]').forEach(b => b.onclick = () => { S.arrival = b.dataset.arr; $$('[data-arr]').forEach(x => x.setAttribute('aria-pressed', x === b)); $('#vReason').hidden = !['ไม่มา', 'ยกเลิก'].includes(S.arrival); refresh(); });
+  const bindWork = () => {
   $$('[data-step]').forEach(c => c.onchange = () => { const n = app.querySelector(`.stNote[data-for="${c.dataset.step}"]`); if (n) n.hidden = !c.checked;
     if (M && c.checked) { const it = $$('.vItem').find(el => !el.querySelector('.iAmt').value && el.querySelector('.iTreat').value === a.work); if (it) { it.querySelector('.iTreat').value = c.dataset.sname; it.querySelector('.iCase').value = c.dataset.case; } }
     if (!S.arrival && a.status === 'นัดแล้ว') { S.arrival = 'มาแล้ว'; $$('[data-arr]').forEach(x => x.setAttribute('aria-pressed', x.dataset.arr === 'มาแล้ว')); }
     refresh(); });
+  $$('#vWork [data-opencase]').forEach(b => b.onclick = () => { if (dirty && !confirm('ยังไม่ได้บันทึก ออกจากหน้านี้?')) return; dirty = false; location.hash = 'cases'; setTimeout(() => viewCase2(b.dataset.opencase), 50); });
+  $$('[data-sren]').forEach(b => b.onclick = () => { const box = app.querySelector(`[data-renfor="${b.dataset.sren}"]`); box.hidden = !box.hidden; if (!box.hidden) box.querySelector('input').focus(); });
+  $$('[data-srensave]').forEach(b => b.onclick = () => { const v = app.querySelector(`[data-renfor="${b.dataset.srensave}"] input`).value.trim(); if (!v) return flash('ใส่ชื่อขั้น');
+    stepLive(b, b.dataset.case, { stepEdits: [{ id: b.dataset.srensave, name: v }] }, 'แก้ชื่อขั้นแล้ว'); });
+  $$('[data-sskip]').forEach(b => b.onclick = () => { if (!b.dataset.sure) { b.dataset.sure = '1'; b.textContent = 'ไม่ทำ?'; setTimeout(() => { if (b.isConnected) { delete b.dataset.sure; b.textContent = '✕'; } }, 4000); return; }
+    stepLive(b, b.dataset.case, { steps: [{ id: b.dataset.sskip, name: b.dataset.sname, decision: 'skip' }] }, 'เอาขั้น "' + b.dataset.sname + '" ออกแล้ว'); });
+  $$('[data-sadd]').forEach(b => { const inp = app.querySelector(`.stNew[data-case="${b.dataset.sadd}"]`);
+    const go = () => { const v = inp.value.trim(); if (!v) return inp.focus(); stepLive(b, b.dataset.sadd, { adds: [{ name: v }] }, 'เพิ่มขั้น "' + v + '" แล้ว'); };
+    b.onclick = go; inp.onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); go(); } }; });
+  };
+  // บันทึกขั้นลงเคสทันที แล้วโหลดขั้นล่าสุดมาแสดง (ติ๊ก/หมายเหตุที่ทำไว้ยังอยู่)
+  const stepLive = async (btn, caseId, body, okMsg) => {
+    btn.disabled = true;
+    const res = await call('caseSaveAll', Object.assign({ id: caseId }, body));
+    if (!res.ok || (res.errors || []).length) { btn.disabled = false; return flash('บันทึกขั้นไม่ได้: ' + ((res.errors || []).join(' · ') || res.error)); }
+    const keep = {}; $$('[data-step]').forEach(c => { keep[c.dataset.step] = { on: c.checked, note: (app.querySelector(`.stNote[data-for="${c.dataset.step}"]`) || {}).value || '' }; });
+    const r2 = await call('visitInfo', { id: a.id });
+    if (r2.ok) r.cases = r2.cases;
+    $('#vWork').innerHTML = workHtml();
+    Object.keys(keep).forEach(id => { const c = app.querySelector(`[data-step="${id}"]`); if (!c) return; c.checked = keep[id].on; const n = app.querySelector(`.stNote[data-for="${id}"]`); if (n) { n.value = keep[id].note; n.hidden = !c.checked; } });
+    bindWork(); refresh(); $('#vWorkMsg').textContent = '✓ ' + okMsg + ' (บันทึกลงเคสแล้ว)';
+  };
+  bindWork();
   if (M) {
     $('#vAddItem').onclick = () => { $('#vItems').insertAdjacentHTML('beforeend', itemRow({ caseId: firstCase?.id })); refresh(); };
     const drawNew = () => { $('#vNewCases').innerHTML = S.newCases.map((n, i) => `<div class="row s" style="padding:4px 0;border-top:1px dashed var(--line)"><span class="grow">คอร์สใหม่ <b>${esc(n.work)}</b>: ราคาเต็ม</span>
