@@ -2550,7 +2550,7 @@ async function viewDaily2(note) {
       <button class="btn ghost small" data-cancel2="${esc(b.items.map(x => x.id).join(','))}">ยกเลิก</button><div class="xBox" style="width:100%"></div></div>`).join('') || '<div class="row s">ยังไม่มีรายการ</div>'}</div>
     </details>
     <details class="card"><summary class="t" style="cursor:pointer">+ ลงรายรับ คนไข้ที่ไม่มีนัด / ขายของ</summary>
-      <p class="s">คนไข้ที่มีนัดวันนี้ ให้ลงเงินจากรายการ "มาแล้ว ยังไม่ลงเงิน" ด้านบน จะได้ไม่ลงซ้ำ</p>
+      <p class="s">คนไข้ที่มีชื่อในนัดด้านบน กดจากรายการนัดจะได้ไม่ลงซ้ำ · หาชื่อไม่เจอ ลงตรงนี้ได้เลย</p>
       <form id="bf2">
         <label for="dDn">DN (ถ้ามี)</label><input id="dDn" list="pts2" placeholder="เช่น 690176">
         <datalist id="pts2">${r.patients.map(p => `<option value="${esc(p.dn)}">${esc(p.nick)}</option>`).join('')}</datalist>
@@ -2580,10 +2580,13 @@ async function viewDaily2(note) {
     const box = document.getElementById('dAppt'); if (!box || !ad.ok) return;
     const paidKey = new Set(r.list.flatMap(x => [x.dn && 'D' + x.dn, x.nick && 'N' + x.nick]).filter(Boolean));
     const came = (ad.list || []).filter(a => ['มาแล้ว', 'เสร็จ'].includes(a.status)).map(a => Object.assign(a, { paid: !!a.payStatus || paidKey.has('D' + a.dn) || (!a.dn && paidKey.has('N' + a.nick)) }));
-    const todo = came.filter(a => !a.paid), waiting = (ad.list || []).filter(a => a.status === 'นัดแล้ว').length;
-    box.innerHTML = `<div class="card"><div class="t">มาแล้ว ยังไม่ลงเงิน (${todo.length})</div>
-      ${todo.map(a => `<div class="row"><div class="grow"><div class="t">${esc(a.start)} · ${esc(a.dn ? a.dn + ' ' : '')}${esc(a.nick)}</div><div class="s">${esc(a.work)} · ${esc(a.doctor)}</div></div><button type="button" class="btn small" data-dvisit="${esc(a.id)}">ลงเงิน</button></div>`).join('') || '<div class="s">✓ คนไข้ที่มาแล้วลงเงินครบ</div>'}
-      <div class="s" style="margin-top:6px">ลงเงินแล้ว ${came.length - todo.length} คน · ยังไม่มา ${waiting} นัด</div></div>`;
+    const todo = came.filter(a => !a.paid), wait = (ad.list || []).filter(a => a.status === 'นัดแล้ว');
+    // v67 นัดที่ยังไม่ได้กด "มาแล้ว" ก็ลงเงินได้จากตรงนี้เลย (หน้าการมาของคนไข้จะบันทึกว่ามาแล้วให้ด้วย)
+    const rowA = (a, lbl) => `<div class="row"><div class="grow"><div class="t">${esc(a.start)} · ${esc(a.dn ? a.dn + ' ' : '')}${esc(a.nick)}</div><div class="s">${esc(a.work)} · ${esc(a.doctor)}</div></div><button type="button" class="btn small" data-dvisit="${esc(a.id)}">${lbl}</button></div>`;
+    box.innerHTML = `<div class="card"><div class="t">คนไข้มีนัดวันนี้ ยังไม่ลงเงิน (${todo.length + wait.length})</div>
+      ${todo.map(a => rowA(a, 'ลงเงิน')).join('')}${wait.map(a => rowA(a, 'มาแล้ว · ลงเงิน')).join('')}
+      ${todo.length + wait.length ? '' : '<div class="s">✓ คนไข้ที่มีนัดลงเงินครบ</div>'}
+      <div class="s" style="margin-top:6px">ลงเงินแล้ว ${came.length - todo.length} คน · ไม่มีชื่อในนัด ลงที่ "+ ลงรายรับ" ด้านล่าง</div></div>`;
     box.querySelectorAll('[data-dvisit]').forEach(b => b.onclick = () => { smaDock('appt'); viewVisit(b.dataset.dvisit); });
   });
   const items = document.getElementById('items');
