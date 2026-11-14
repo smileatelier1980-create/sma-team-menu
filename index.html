@@ -108,6 +108,9 @@ const memSet = (k, v) => { const s = JSON.stringify(v); try { localStorage.setIt
 const memClear = () => { try { Object.keys(localStorage).filter(k => k.startsWith('sma_c_')).forEach(k => localStorage.removeItem(k)); } catch (e) {} };
 let dirty = false, lastWrite = 0;
 document.addEventListener('input', () => { dirty = true; }, true);
+document.addEventListener('change', () => { dirty = true; }, true);
+// v68 กำลังกดช่องกรอกอยู่ = ห้ามโหลดหน้าใหม่เบื้องหลัง (กันหน้าเด้ง/ข้อมูลที่กรอกหาย)
+const isEditing = () => { const a = document.activeElement; return !!a && /^(INPUT|SELECT|TEXTAREA)$/.test(a.tagName) && !['button', 'submit', 'checkbox', 'radio'].includes(a.type); };
 const inFlight = new Map();
 // ปุ่มคัดลอกทางไปโฟลเดอร์รูป (ใช้กับแอป DS file)
 document.addEventListener('click', async e => {
@@ -133,7 +136,7 @@ async function api(action, data = {}) {
   if (!cached) return fresh;
   const hashAt = location.hash;
   fresh.then(r => {
-    if (r && r.ok && JSON.stringify(r) !== JSON.stringify(cached) && location.hash === hashAt && !dirty) route(true);
+    if (r && r.ok && JSON.stringify(r) !== JSON.stringify(cached) && location.hash === hashAt && !dirty && !isEditing()) route(true);
   }).catch(() => {});
   return cached;
 }
@@ -298,8 +301,10 @@ function route(refresh) {
   if (me && me.tabs && authPage && !me.tabs.includes(authPage) && page !== 'patient') page = me.tabs[0];
   tabs.querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', b.dataset.tab === page));
   smaDock(page);
-  window.scrollTo(0,0);
-  ({newappt:viewSmaNewAppt, buyapproval:()=>viewSmaApproval('buy'), teamapproval:()=>viewSmaApproval('team'), labstock:viewSmaLabStock, labphotos:viewSmaLabPhotos, tasks: viewSmaHome, mytasks: viewTasks, more: viewSmaMore, labfit: viewSmaLabFits, recall: viewSmaRecall, stock: viewStock, team: viewTeam, cases: viewCases2, lab: viewLab, buy: viewBuy, daily: () => viewDaily2(), checklist: () => viewChecklist(), appt: () => viewAppt(), cap: () => { capOpen = ''; viewCapture(); }, pay: () => viewPay(), payroll: () => viewPayroll(), df: () => viewDF()}[page] || soon)(page);
+  const keepY = refresh ? window.scrollY : 0;   // v68 โหลดใหม่เบื้องหลัง = อยู่ตำแหน่งเดิม ไม่เด้งขึ้นบน
+  if (!refresh) window.scrollTo(0,0);
+  const shown = ({newappt:viewSmaNewAppt, buyapproval:()=>viewSmaApproval('buy'), teamapproval:()=>viewSmaApproval('team'), labstock:viewSmaLabStock, labphotos:viewSmaLabPhotos, tasks: viewSmaHome, mytasks: viewTasks, more: viewSmaMore, labfit: viewSmaLabFits, recall: viewSmaRecall, stock: viewStock, team: viewTeam, cases: viewCases2, lab: viewLab, buy: viewBuy, daily: () => viewDaily2(), checklist: () => viewChecklist(), appt: () => viewAppt(), cap: () => { if (!refresh) capOpen = ''; return viewCapture(); }, pay: () => viewPay(), payroll: () => viewPayroll(), df: () => viewDF()}[page] || soon)(page);
+  if (refresh && keepY) Promise.resolve(shown).then(() => window.scrollTo(0, keepY)).catch(() => {});
   if (page === 'appt' || page === 'cases') bgCalSync(page);
 }
 // v34.1 ดึงปฏิทินแยกเบื้องหลัง (ไม่ให้หน้าเมนูรอ) · มีนัดเปลี่ยน → โหลดหน้าใหม่เงียบ ๆ
@@ -307,7 +312,7 @@ let lastBgSync = 0;
 function bgCalSync(page) {
   if (Date.now() - lastBgSync < 45000) return;
   lastBgSync = Date.now();
-  apiNet('calSync').then(r => { if (r && r.ok && r.changed) { memClear(); if ((location.hash.slice(1) || 'tasks') === page && !dirty) route(true); } }).catch(() => {});
+  apiNet('calSync').then(r => { if (r && r.ok && r.changed) { memClear(); if ((location.hash.slice(1) || 'tasks') === page && !dirty && !isEditing()) route(true); } }).catch(() => {});
 }
 
 // ===== ทีมงาน: ลงเวลา / ขอโอที / ลา =====
