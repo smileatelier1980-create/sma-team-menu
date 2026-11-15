@@ -2742,7 +2742,7 @@ async function viewCapture(note) {
   }
   app.innerHTML = `
     <div id="m">${note ? `<div class="msg ok">${esc(note)}</div>` : ''}</div>
-    <div class="sma-subhead"><div><h2>${esc(cur.name)}</h2><div class="s">กด "+ เพิ่มรูป" (เลือกได้หลายรูป) ใบส่งของ/ใบแจ้งหนี้/ใบวางบิลที่อ่านได้ครบ ระบบบันทึกให้เลย · ใบที่อ่านไม่ครบจะขึ้นให้แก้แล้วกดยืนยัน</div></div><button type="button" class="btn ghost small" id="capBack">← หมวดทั้งหมด</button></div>
+    <div class="sma-subhead"><div><h2>${esc(cur.name)}</h2><div class="s">กด "+ เพิ่มรูป" (เลือกได้หลายรูป) ใบส่งของ/ใบแจ้งหนี้/ใบวางบิลที่อ่านได้ครบ ระบบบันทึกให้เลย · ใบที่ระบบไม่แน่ใจ ส่งให้หมอยืนยัน</div></div><button type="button" class="btn ghost small" id="capBack">← หมวดทั้งหมด</button></div>
     <div class="card" data-cc="${esc(cur.id)}">
       <label class="btn" style="display:flex;align-items:center;justify-content:center;width:100%;margin-top:0">+ เพิ่มรูป<input type="file" accept="image/*" multiple data-in="${esc(cur.id)}" style="display:none"></label>
       <div class="s ccProg"></div><div class="ccN" hidden></div><div class="ccList">${of(cur.id).map(d => capCard(d, L)).join('')}</div></div>
@@ -2768,7 +2768,7 @@ async function viewCapture(note) {
     }
     const n = of(cat).length; box.querySelector('.ccN').innerHTML = n ? ` · <span class="warn">รอยืนยัน ${n}</span>` : '';
     const left = files.length - autoN;
-    prog.textContent = !files.length ? '' : (autoN ? `บันทึกให้แล้ว ${autoN} ใบ` : '') + (autoN && left ? ' · ' : '') + (left ? `อีก ${left} ใบ ตรวจแล้วกดยืนยัน` : '');
+    prog.textContent = !files.length ? '' : (autoN ? `บันทึกให้แล้ว ${autoN} ใบ` : '') + (autoN && left ? ' · ' : '') + (left ? (me.role === 'owner' ? `อีก ${left} ใบ ตรวจแล้วกดยืนยัน` : `อีก ${left} ใบ ส่งให้หมอยืนยันแล้ว`) : '');
     if (autoFlags.length) flash('บันทึกแล้ว · ตรวจ: ' + autoFlags.join(' / '), true);
     inp.value = '';
   });
@@ -2782,6 +2782,9 @@ async function capAutoSave(up) {
   if (kind !== 'invoice' && kind !== 'billing') return null;
   const total = Number(d.total || d.amount || 0);
   if (up.ocr === false || !d.vendor || !(total > 0) || (d.unsure || []).some(f => ['vendor', 'amount', 'docNo'].includes(f))) return null;
+  // v70 กันยอดอ่านผิด: VAT ต้องมีและเท่ากับ 7/107 ของยอดรวม (คลาดได้ 1.5 บาท) ไม่งั้นส่งให้หมอยืนยัน
+  const vat = Number(d.vat || 0);
+  if (!(vat > 0) || Math.abs(total * 7 / 107 - vat) > 1.5) return null;
   const data = { vendor: d.vendor, docNo: d.docNo || '', date: d.date || '', due: d.due || '', total, vat: d.vat || '', patient: d.patient || '', doctor: d.doctor || '', work: d.work || '', paid: false,
     lines: (d.lines || []).map(l => ({ date: l.date || '', inv: l.inv || l.rx || '', amount: l.amount || '', patient: l.patient || '', work: l.work || '', doctor: l.doctor || '' })) };
   const res = await call('capConfirm', { id: up.id, kind, data });
@@ -2829,9 +2832,13 @@ function capKindOpts(c) {
   const m = CAP_KIND_BY_CAT[c.cat];
   return m ? Object.entries(m).concat([['discard', 'ทิ้ง (ถ่ายผิด)']]) : CAP_KINDS;
 }
+const capDocKind = k => k === 'invoice' || k === 'billing';
 function capCard(c, L) {
   const d = c.draft || {}; d._id = c.id;
   const kind = kindOf(c.kind);
+  // v70 ใบส่งของ/ใบแจ้งหนี้/ใบวางบิลที่บันทึกเองไม่ได้ = งานหมอยืนยัน · คนอื่นเห็นว่าส่งหมอแล้ว ไม่ต้องกด
+  if (capDocKind(kind) && me.role !== 'owner') return `<div class="card" data-cap="${esc(c.id)}" data-ro="1"><div class="t">📨 ส่งให้หมอยืนยันแล้ว · <a href="${esc(c.url)}" target="_blank" rel="noopener">ดูรูป</a></div>
+    <div class="s">${esc(d.vendor || 'ไม่ทราบผู้ขาย')}${d.docNo ? ' · ' + esc(d.docNo) : ''}${d.total || d.amount ? ' · ' + baht(d.total || d.amount) : ''} · ไม่ต้องทำอะไรต่อ</div></div>`;
   return `<div class="card" data-cap="${esc(c.id)}">
     <div style="display:flex;gap:8px;align-items:center"><div class="t grow">${c.status === 'สลิปรอจับคู่' ? '🕓 สลิปรอจับคู่' : 'รอยืนยัน'} · <a href="${esc(c.url)}" target="_blank" rel="noopener">ดูรูป</a></div>
       ${c.ocr === false ? '<span class="pill" style="background:var(--warnbg);color:var(--warn)">อ่านไม่ออก พิมพ์เอง</span>' : ''}</div>
@@ -2841,7 +2848,7 @@ function capCard(c, L) {
 }
 function bindCapCards(L) {
   app.querySelectorAll('[data-cap]').forEach(el => {
-    if (el.dataset.bound) return; el.dataset.bound = 1;
+    if (el.dataset.bound || el.dataset.ro) return; el.dataset.bound = 1;
     const c = capDrafts.find(x => x.id === el.dataset.cap);
     const body = el.querySelector('.fBody');
     const bindLines = () => { const a = el.querySelector('.fAddLine'); if (a) a.onclick = () => el.querySelector('.fLines').insertAdjacentHTML('beforeend', lineRow({}, L)); };
@@ -3142,7 +3149,20 @@ async function viewSmaHome() {
     box.innerHTML = '<div class="sma-subhead"><div class="sma-menu-title">นัดวันนี้</div><button type="button" class="btn ghost small" data-sma-page="appt">ดูทั้งหมด</button></div><div class="list">' + (upcoming.map(a => `<div class="row"><div class="grow"><div class="t">${esc(a.start)} · ${esc(a.dn ? a.dn + ' ' : '')}${esc(a.nick)}</div><div class="s">${esc(a.work)} · ${esc(a.doctor)} · ${esc(a.unit || 'SMA')}</div></div><button type="button" class="btn ghost small" data-sma-visit="${esc(a.id)}">เปิด</button></div>`).join('') || '<div class="row s">ไม่มีนัดที่รอมาในวันนี้</div>') + '</div>';
     smaBindLinks(box); box.querySelectorAll('[data-sma-visit]').forEach(b => b.onclick = () => { smaDock('appt'); viewVisit(b.dataset.smaVisit); });
   });
-  await Promise.all([tasks,appointments]);
+  // v70 หน้าแรกหมอ: เอกสารแล็บ/ร้านที่รอหมอยืนยัน + งานเข้าวันนี้
+  let docs = Promise.resolve();
+  if (me.role === 'owner') docs = call('capHome').then(r => {
+    if (!stillHome() || !r.ok) return;
+    const wait = (r.pending || []).filter(c => capDocKind(kindOf(c.kind)));
+    const t = todayISO(), inToday = (r.done || []).filter(x => String(x.at || '').slice(0, 10) === t && /Payables/.test(String(x.target || '')));
+    if (!wait.length && !inToday.length) return;
+    const el = document.getElementById('smaHomeTasks'); if (!el) return;
+    el.insertAdjacentHTML('beforebegin', `<div class="card"><div class="sma-subhead"><div class="sma-menu-title">เอกสารแล็บ / ร้าน</div><button type="button" class="btn ghost small" data-sma-page="cap">เปิด</button></div>
+      ${wait.length ? `<div class="t warn">รอหมอยืนยัน ${wait.length} ใบ</div>${wait.slice(0, 4).map(c => { const d = c.draft || {}; return `<div class="s">${esc(d.vendor || 'ไม่ทราบผู้ขาย')}${d.docNo ? ' · ' + esc(d.docNo) : ''}${d.total || d.amount ? ' · ' + baht(d.total || d.amount) : ''}</div>`; }).join('')}` : ''}
+      ${inToday.length ? `<div class="s" style="margin-top:4px">งานเข้าวันนี้ บันทึกแล้ว ${inToday.length} ใบ</div>` : ''}</div>`);
+    smaBindLinks(el.previousElementSibling);
+  });
+  await Promise.all([tasks,appointments,docs]);
 }
 async function viewSmaLabFits() {
   app.innerHTML = '<div class="center">กำลังโหลดวันนัดใส่งาน…</div>';
