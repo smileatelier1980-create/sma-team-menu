@@ -2742,7 +2742,7 @@ async function viewCapture(note) {
   }
   app.innerHTML = `
     <div id="m">${note ? `<div class="msg ok">${esc(note)}</div>` : ''}</div>
-    <div class="sma-subhead"><div><h2>${esc(cur.name)}</h2><div class="s">กด "+ เพิ่มรูป" (เลือกได้หลายรูป) ระบบอ่านให้ ช่องสีเหลืองคือที่ระบบไม่แน่ใจ ตรวจแล้วกดยืนยันทีละใบ</div></div><button type="button" class="btn ghost small" id="capBack">← หมวดทั้งหมด</button></div>
+    <div class="sma-subhead"><div><h2>${esc(cur.name)}</h2><div class="s">กด "+ เพิ่มรูป" (เลือกได้หลายรูป) ใบส่งของ/ใบแจ้งหนี้/ใบวางบิลที่อ่านได้ครบ ระบบบันทึกให้เลย · ใบที่อ่านไม่ครบจะขึ้นให้แก้แล้วกดยืนยัน</div></div><button type="button" class="btn ghost small" id="capBack">← หมวดทั้งหมด</button></div>
     <div class="card" data-cc="${esc(cur.id)}">
       <label class="btn" style="display:flex;align-items:center;justify-content:center;width:100%;margin-top:0">+ เพิ่มรูป<input type="file" accept="image/*" multiple data-in="${esc(cur.id)}" style="display:none"></label>
       <div class="s ccProg"></div><div class="ccN" hidden></div><div class="ccList">${of(cur.id).map(d => capCard(d, L)).join('')}</div></div>
@@ -2752,23 +2752,41 @@ async function viewCapture(note) {
     const cat = inp.dataset.in, box = inp.closest('[data-cc]'), prog = box.querySelector('.ccProg'), list = box.querySelector('.ccList');
     capOpen = cat;
     const files = [...inp.files];
+    let autoN = 0; const autoFlags = [];
     for (let i = 0; i < files.length; i++) {
       prog.textContent = `กำลังอ่านรูปที่ ${i + 1}/${files.length}…`;
       let data; try { data = await shrinkImage(files[i]); } catch (e) { flash(e.message); continue; }
       const up = await call('capUpload', { photos: [data], cat });
       if (!up.ok) { flash(errV2(up)); continue; }
+      // v69 ใบส่งของ/ใบแจ้งหนี้/ใบวางบิล บันทึกเลยไม่ต้องกดยืนยัน (หมอสั่ง 16 พ.ย.) · ถ้าข้อมูลไม่ครบหรือระบบเตือน ค่อยโชว์การ์ดให้แก้
+      const auto = await capAutoSave(up);
+      if (auto) { autoN++; if (auto.flags?.length) autoFlags.push(auto.flags.join(' · ')); continue; }
       const d = { id: up.id, url: up.url, kind: up.draft.kind, draft: up.draft, suggest: up.suggest, status: 'รอยืนยัน', ocr: up.ocr, cat };
       capDrafts.unshift(d);
       list.insertAdjacentHTML('afterbegin', capCard(d, L));
       bindCapCards(L);
     }
     const n = of(cat).length; box.querySelector('.ccN').innerHTML = n ? ` · <span class="warn">รอยืนยัน ${n}</span>` : '';
-    prog.textContent = files.length ? `อ่านเสร็จ ${files.length} รูป ตรวจแล้วกดยืนยันทีละใบ` : '';
+    const left = files.length - autoN;
+    prog.textContent = !files.length ? '' : (autoN ? `บันทึกให้แล้ว ${autoN} ใบ` : '') + (autoN && left ? ' · ' : '') + (left ? `อีก ${left} ใบ ตรวจแล้วกดยืนยัน` : '');
+    if (autoFlags.length) flash('บันทึกแล้ว · ตรวจ: ' + autoFlags.join(' / '), true);
     inp.value = '';
   });
   bindCapCards(L); smaBindLinks(app);
 }
 
+// v69 บันทึกใบส่งของ/ใบแจ้งหนี้/ใบวางบิลอัตโนมัติ: ต้องอ่านได้ ผู้ขาย + ยอด · ใบวางบิลที่ไม่มีบรรทัด = ใบกำกับใบเดียว บันทึกเป็นใบส่งของ
+async function capAutoSave(up) {
+  const d = up.draft || {}; let kind = kindOf(d.kind);
+  if (kind === 'billing' && !(d.lines || []).length) kind = 'invoice';
+  if (kind !== 'invoice' && kind !== 'billing') return null;
+  const total = Number(d.total || d.amount || 0);
+  if (up.ocr === false || !d.vendor || !(total > 0) || (d.unsure || []).some(f => ['vendor', 'amount', 'docNo'].includes(f))) return null;
+  const data = { vendor: d.vendor, docNo: d.docNo || '', date: d.date || '', due: d.due || '', total, vat: d.vat || '', patient: d.patient || '', doctor: d.doctor || '', work: d.work || '', paid: false,
+    lines: (d.lines || []).map(l => ({ date: l.date || '', inv: l.inv || l.rx || '', amount: l.amount || '', patient: l.patient || '', work: l.work || '', doctor: l.doctor || '' })) };
+  const res = await call('capConfirm', { id: up.id, kind, data });
+  return res && res.ok ? res : null;
+}
 const yel = (d, f) => (d.unsure || []).includes(f) ? ' style="background:#fff7cc"' : '';
 function capFields(kind, d, s, L) {
   const dt = `<div style="display:grid;grid-template-columns:1fr 1fr;gap:0 8px"><div><label>วันที่</label><input class="fDate" type="date" value="${esc(d.date || '')}"${yel(d, 'date')}></div>
