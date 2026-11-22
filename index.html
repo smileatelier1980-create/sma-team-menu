@@ -2121,6 +2121,8 @@ async function viewVisit(id, note, preset) {
       $('#vSum').innerHTML = (tot ? `รวมรายการ ${baht(tot)} · จ่าย ${baht(paid)}${Math.abs(tot - paid) > 0.01 ? ' <span class="bad">ยังไม่เท่ากัน</span>' : ' ✓'}` : '') + (left.length ? `<br>หลังจ่ายวันนี้: ${left.join(' · ')}` : '');
       $('#vSlipBox').hidden = !(Number($('#vTr').value) > 0); }
   };
+  // v75 สลิปจาก LINE ของคนไข้คนนี้ → เติมยอดโอนให้ เคาน์เตอร์ตรวจงาน/หมอ แล้วกดบันทึก (ลงนัดครั้งหน้าในหน้าเดียวกัน)
+  { const mine = (r.slips || []).filter(s => s.mine); if (M && mine.length && !(r.paidToday || []).length) { const amt = mine.reduce((n, s) => n + s.amount, 0); const tr = $('#vTr'), ia = app.querySelector('#vItems .iAmt'); if (tr && !tr.value) tr.value = amt; if (ia && !ia.value) ia.value = amt; const box = $('#vSlipBox'); if (box) box.insertAdjacentHTML('afterbegin', '<div class="s ok" style="margin-bottom:4px">📩 คนไข้ส่งสลิปใน LINE ยอด ' + baht(amt) + ' — ใส่ยอดโอนให้แล้ว ตรวจงาน/หมอ แล้วกดบันทึก</div>'); try { refresh(); } catch (e) {} } }
   $('#vBack').onclick = () => { if (dirty && !confirm('ยังไม่ได้บันทึก ออกจากหน้านี้?')) return; dirty = false; viewAppt(); };
   $$('[data-opencase]').filter(b => !b.closest('#vWork')).forEach(b => b.onclick = () => { if (dirty && !confirm('ยังไม่ได้บันทึก ออกจากหน้านี้?')) return; dirty = false; location.hash = 'cases'; setTimeout(() => viewCase2(b.dataset.opencase), 50); });
   $$('[data-arr]').forEach(b => b.onclick = () => { S.arrival = b.dataset.arr; $$('[data-arr]').forEach(x => x.setAttribute('aria-pressed', x === b)); $('#vReason').hidden = !['ไม่มา', 'ยกเลิก'].includes(S.arrival); refresh(); });
