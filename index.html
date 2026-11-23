@@ -106,6 +106,9 @@ const READ_ACTIONS = new Set(['stockTree', 'dailyToday', 'apptDay', 'checklist',
 const memGet = k => { try { return JSON.parse(localStorage.getItem('sma_c_' + k) || 'null'); } catch (e) { return null; } };
 const memSet = (k, v) => { const s = JSON.stringify(v); try { localStorage.setItem('sma_c_' + k, s); } catch (e) { memClear(); try { localStorage.setItem('sma_c_' + k, s); } catch (e2) {} } };
 const memClear = () => { try { Object.keys(localStorage).filter(k => k.startsWith('sma_c_')).forEach(k => localStorage.removeItem(k)); } catch (e) {} };
+// v84 ปฏิทินเปลี่ยน → ล้างเฉพาะข้อมูลที่เกี่ยวกับนัด (หน้าอื่นยังเปิดเร็วจากของที่จำไว้ แล้วดึงของใหม่ตามหลัง)
+const CAL_ACTIONS = ['apptDay', 'caseList', 'caseInfo', 'myCases', 'tasksHome', 'checklist', 'today', 'dailyToday', 'patientInfo', 'patients'];
+const memClearActions = acts => { try { Object.keys(localStorage).filter(k => k.startsWith('sma_c_') && acts.some(a => k.indexOf('|' + a + '|') > -1)).forEach(k => localStorage.removeItem(k)); } catch (e) {} };
 let dirty = false, lastWrite = 0;
 document.addEventListener('input', () => { dirty = true; }, true);
 document.addEventListener('change', () => { dirty = true; }, true);
@@ -312,7 +315,7 @@ let lastBgSync = 0;
 function bgCalSync(page) {
   if (Date.now() - lastBgSync < 45000) return;
   lastBgSync = Date.now();
-  apiNet('calSync').then(r => { if (r && r.ok && r.changed) { memClear(); if ((location.hash.slice(1) || 'tasks') === page && !dirty && !isEditing()) route(true); } }).catch(() => {});
+  apiNet('calSync').then(r => { if (r && r.ok && r.changed) { memClearActions(CAL_ACTIONS); if ((location.hash.slice(1) || 'tasks') === page && !dirty && !isEditing()) route(true); } }).catch(() => {});
 }
 
 // ===== ทีมงาน: ลงเวลา / ขอโอที / ลา =====
