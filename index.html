@@ -2982,7 +2982,7 @@ function renderAttendanceMonth(sheet, records, today) {
       <th scope="row">${label} ${Number(day.date.slice(-2))}</th>
       <td>${esc(a?.in || '–')}</td><td>${esc(a?.out || '–')}</td><td>${descriptions.map(esc).join(' · ')}</td>
       <td>${[
-        ...(day.earnings?.length ? ['<div><b>' + baht(day.earnings.reduce((sum, item) => sum + item.amount, 0)) + '</b> <span class="s">จ่ายเพิ่มตามสรุป</span></div><div class="s">' + day.earnings.map(item => esc(item.label) + ' ' + baht(item.amount)).join(' · ') + '</div>'] : []),
+        ...(day.earnings?.length ? ['<div><b>' + baht(day.earnings.reduce((sum, item) => sum + item.amount, 0)) + ' บาท</b> <span class="s">ต้องจ่ายเพิ่มตามสรุป</span></div><div class="s">' + day.earnings.map(item => esc(item.label) + ' ' + baht(item.amount)).join(' · ') + '</div>'] : []),
         ...(extraPaid.has(day.date) ? ['<div><b>' + baht(extraPaid.get(day.date)) + '</b> <span class="s">จ่ายเพิ่มแล้ว</span></div>'] : []),
         ...(paid.has(day.date) ? ['<div><b>' + baht(paid.get(day.date)) + '</b> <span class="s">เงินเดือนจ่ายแล้ว</span></div>'] : [])
       ].join('') || '–'}</td>
@@ -2993,9 +2993,10 @@ function renderAttendanceMonth(sheet, records, today) {
     <p>เงินเดือนที่บันทึกว่าจ่ายแล้ว · <b>${sheet.payments.length ? baht(sheet.payments.reduce((sum, p) => sum + p.amount, 0)) + ' บาท' : 'ยังไม่พบรายการที่ตรงชื่อ'}</b></p>
     ${income ? `<p>โอที ${baht(income.otPay)} · โอทีบ้านหมอ ${baht(income.otHomePay)} · ทำงานวันหยุด ${baht(income.holidayPay)} · เบี้ยขยัน ${baht(income.allowance)} บาท</p><p><b>รวมโอทีและเบี้ยตามสรุประบบ ${baht(income.total)} บาท</b></p>` : '<p class="s">ยังไม่พบสรุปโอทีและเบี้ยขยันที่ตรงชื่อ</p>'}
     ${sheet.uniqueName ? '' : '<p class="s">ระบบจับคู่ชื่อกับยอดจ่ายไม่ได้อย่างชัดเจน กรุณาตรวจในหน้าเงินเดือน</p>'}
+    ${extraPaid.size ? '<p class="s">ตรวจรายการจ่ายเพิ่มแล้วก่อนจ่าย ยอดจากคำขอและยอดที่จ่ายจริงบันทึกแยกกัน</p>' : ''}
   </div><div class="card" style="overflow-x:auto">
     <style>.attendance-sheet{width:100%;border-collapse:collapse;font-size:13px}.attendance-sheet th,.attendance-sheet td{padding:6px 5px;text-align:left;border-bottom:1px solid var(--line)}.attendance-sheet th,.attendance-sheet td:nth-child(2),.attendance-sheet td:nth-child(3),.attendance-sheet td:nth-child(5){white-space:nowrap}.attendance-sheet button{padding:0 8px;white-space:nowrap}</style>
-    <table class="attendance-sheet" aria-label="ตารางเข้างานรายเดือน"><thead><tr><th>วัน</th><th>เข้า</th><th>ออก</th><th>สถานะ</th><th>จ่าย ฿</th><th>แก้ไข</th></tr></thead><tbody>${rows}</tbody><tfoot>${income ? `<tr><th colspan="4" scope="row">เบี้ยขยันรายเดือน</th><td><b>${baht(income.allowance)}</b></td><td></td></tr><tr><th colspan="4" scope="row">รวมโอที ค่าวันหยุด และเบี้ยขยัน</th><td><b>${baht(income.total)}</b></td><td></td></tr>` : ''}${sheet.payments.length ? `<tr><th colspan="4" scope="row">รวมเงินเดือนที่จ่ายแล้ว</th><td><b>${baht(sheet.payments.reduce((sum, p) => sum + p.amount, 0))}</b></td><td></td></tr>` : ''}${extraPaid.size ? `<tr><th colspan="4" scope="row">รวมจ่ายเพิ่มที่จ่ายแล้ว</th><td><b>${baht(extraTotal)}</b></td><td></td></tr>` : ''}</tfoot></table>
+    <table class="attendance-sheet" aria-label="ตารางเข้างานรายเดือน"><thead><tr><th>วัน</th><th>เข้า</th><th>ออก</th><th>สถานะ</th><th>จ่าย ฿</th><th>แก้ไข</th></tr></thead><tbody>${rows}</tbody><tfoot>${income ? `<tr><th colspan="4" scope="row">เบี้ยขยันรายเดือน</th><td><b>${baht(income.allowance)}</b></td><td></td></tr><tr><th colspan="4" scope="row">รวมต้องจ่ายเพิ่มตามสรุป</th><td><b>${baht(income.total)}</b></td><td></td></tr>` : ''}${sheet.payments.length ? `<tr><th colspan="4" scope="row">รวมเงินเดือนที่จ่ายแล้ว</th><td><b>${baht(sheet.payments.reduce((sum, p) => sum + p.amount, 0))}</b></td><td></td></tr>` : ''}${extraPaid.size ? `<tr><th colspan="4" scope="row">รวมจ่ายเพิ่มที่จ่ายแล้ว</th><td><b>${baht(extraTotal)}</b></td><td></td></tr>` : ''}</tfoot></table>
   </div>`;
 }
 async function viewOwnerAttendance(person = '', message = '', month = window._prMonth || todayISO().slice(0, 7)) {
