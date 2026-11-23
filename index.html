@@ -2948,7 +2948,7 @@ async function viewPayroll(month) {
       <table style="width:100%;border-collapse:collapse;font-size:13px"><tr><th ${th}>วันที่</th><th ${th}>เข้า</th><th ${th}>ออก</th><th ${th}>สาย</th></tr>${byNick[n].map(a => `<tr><td ${td}>${esc(a.date)}${a.off ? ' <span class="s">(วันหยุด)</span>' : ''}</td><td ${td}>${esc(a.in)}</td><td ${td}>${esc(a.out || '-')}</td><td ${td}${a.late ? ' class="bad"' : ''}>${a.late ? a.late + ' นาที' + (a.reason ? ' · ' + esc(a.reason) : '') : '-'}</td></tr>`).join('')}</table></details>`).join('') || '<p class="s">ยังไม่มีการลงเวลาในเดือนนี้</p>';
   const reqs = r.requests.length ? r.requests.map(q => `<div class="s">${esc(q.date)}${q.dateTo && q.dateTo !== q.date ? '–' + esc(q.dateTo) : ''} · ${esc(q.nick)} · ${esc(q.type)}${q.start ? ' ' + esc(q.start) + '–' + esc(q.end) : ''} · ${esc(q.reason)} · <b>${esc(q.status)}</b></div>`).join('') : '<p class="s">ไม่มี</p>';
   app.innerHTML = `<div class="card"><div class="t">เงินเดือนและการเข้างาน</div><p class="s">หน้านี้เห็นเฉพาะเจ้าของคลินิก</p>
-      <label for="prM">เดือน</label><input id="prM" type="month" value="${esc(r.month)}"></div>
+      <label for="prM">เดือน</label><input id="prM" type="month" value="${esc(r.month)}">${String(me.nickname).trim().toLowerCase() === 'drdear' ? '<button class="btn small" type="button" id="attReport">ประวัติเวลาเข้า–ออก</button>' : ''}</div>
     <div class="card"><div class="t">เงินเดือนที่โอนแล้ว · รวม ${baht(r.salaryTotal)} บาท</div>${payRows(r.salaries)}
       ${r.others.length ? `<div class="t" style="margin-top:10px;font-size:15px">จ่ายอื่น (ส่วนแบ่ง X-ray)</div>${payRows(r.others)}` : ''}
       <p class="s" style="margin-top:6px">DF หมอดูที่เมนู DF · ลงสลิปเงินเดือนใหม่: ส่งรูปสลิปให้ Claude หรือบันทึกในเมนูเจ้าหนี้</p></div>
@@ -2956,7 +2956,65 @@ async function viewPayroll(month) {
       <p class="s">โอที ${baht(r.rates.ot || 0)}/ชม. · โอทีที่บ้านหมอ ${baht(r.rates.otHome || 0)}/วัน · วันหยุด ${baht(r.rates.holiday || 0)}/วัน · เบี้ยขยันเต็ม ${baht(r.rates.allowance || 0)}${r.clockStart ? ' · เริ่มนับขาด/สาย ' + esc(r.clockStart) : ''}</p>${people}</details>
     <details class="card"><summary class="t" style="cursor:pointer">ประวัติเข้าทำงาน</summary>${att}
       <div class="t" style="margin-top:10px;font-size:15px">คำขอลา / โอที เดือนนี้</div>${reqs}</details>`;
+  const report = document.getElementById('attReport');
+  if (report) report.onclick = () => viewOwnerAttendance();
   document.getElementById('prM').onchange = e => viewPayroll(e.target.value);
+}
+
+async function viewOwnerAttendance(person = '', message = '') {
+  app.innerHTML = '<div class="center">กำลังโหลดประวัติเวลา…</div>';
+  const r = await call('ownerAttendanceList', { person });
+  if (!r.ok) return showError(r.error === 'owner_only' ? 'เมนูนี้สำหรับหมอเดียร์' : 'โหลดประวัติเวลาไม่ได้');
+  const current = r.people.find(p => p.id === person);
+  app.innerHTML = `<div class="card">
+    <button type="button" class="btn ghost small" id="attBack">กลับไปหน้าเงินเดือน</button>
+    <h2>ประวัติเวลาเข้า–ออก</h2>
+    <label for="attPerson">พนักงาน</label>
+    <select id="attPerson"><option value="">เลือกพนักงาน</option>${r.people.map(p => `<option value="${esc(p.id)}"${p.id === person ? ' selected' : ''}>${esc(p.name)}</option>`).join('')}</select>
+    ${message ? `<p role="status">${esc(message)}</p>` : ''}
+  </div>${current ? `<div class="card"><button type="button" class="btn small" id="attAdd">+ เติมเวลาที่ลืมลง</button><div id="attEditor"></div></div>
+  <div class="list">${r.records.map((a, i) => `<div class="row"><div class="grow"><div class="t">${esc(a.date)}${a.off ? ' · วันหยุด' : ''}</div><div class="s">เข้า ${esc(a.in || 'ยังไม่ลง')} · ออก ${esc(a.out || 'ยังไม่ลง')}${Number(a.late) ? ' · สาย ' + esc(a.late) + ' นาที' : ''}</div></div><button type="button" class="btn ghost small" data-att="${i}">แก้ไข</button></div>`).join('') || '<div class="row">ยังไม่มีประวัติการลงเวลา</div>'}</div>` : ''}`;
+  app.querySelector('#attBack').onclick = () => viewPayroll();
+  app.querySelector('#attPerson').onchange = e => viewOwnerAttendance(e.target.value);
+  if (!current) return;
+  const box = app.querySelector('#attEditor');
+  const errors = { attendance_invalid: 'ตรวจวันที่ เวลา และเหตุผลอีกครั้ง ระบบรับการแก้ไขย้อนหลังถึงเมื่อวาน', attendance_changed: 'ข้อมูลเวลาเปลี่ยนแล้ว กรุณาเปิดรายงานใหม่ก่อนแก้ไข', attendance_duplicate: 'วันที่นี้มีรายการซ้ำ กรุณาตรวจข้อมูลเดิมก่อนแก้ไข', attendance_employee: 'บัญชีพนักงานนี้ยังเพิ่มรายการใหม่ไม่ได้' };
+  const edit = a => {
+    const existing = Boolean(a);
+    box.innerHTML = `<form>
+      <label for="attDate">วันที่</label><input type="date" id="attDate" name="date" required max="${esc(addDaysISO(r.today, -1))}" value="${esc(a?.date || '')}" ${existing ? 'readonly' : ''}>
+      <label for="attIn">เวลาเข้า</label><input type="time" id="attIn" name="start" required value="${esc(a?.in || '')}">
+      <label for="attOut">เวลาออก</label><input type="time" id="attOut" name="end" value="${esc(a?.out || '')}">
+      <label for="attReason">เหตุผลที่แก้ไข</label><textarea id="attReason" name="reason" required maxlength="300"></textarea>
+      <p class="s">แก้ไขย้อนหลังได้ถึงเมื่อวาน เวลาเข้า–ออกและการมาสายจะอัปเดตในรายงาน</p>
+      <button type="submit" class="btn small">บันทึกเวลา</button>
+      <button type="button" class="btn ghost small" data-cancel>ยกเลิก</button>
+      <p role="status" class="s"></p>
+    </form>`;
+    const form = box.querySelector('form');
+    form.querySelector('[data-cancel]').onclick = () => { box.replaceChildren(); };
+    form.onsubmit = async e => {
+      e.preventDefault();
+      const data = new FormData(form);
+      const button = form.querySelector('[type="submit"]');
+      const status = form.querySelector('[role="status"]');
+      button.disabled = true;
+      status.textContent = 'กำลังบันทึก…';
+      try {
+        const result = await call('ownerAttendanceSave', { person, existing, date: data.get('date'), in: data.get('start'), out: data.get('end'), reason: data.get('reason'), previousIn: a?.in || '', previousOut: a?.out || '' });
+        if (result.ok) return viewOwnerAttendance(person, 'บันทึกเวลาแล้ว');
+        status.textContent = errors[result.error] || 'บันทึกไม่สำเร็จ กรุณาลองใหม่';
+      } finally {
+        button.disabled = false;
+      }
+    };
+    box.scrollIntoView({ block: 'nearest' });
+  };
+  app.querySelector('#attAdd').onclick = () => edit();
+  app.querySelectorAll('[data-att]').forEach(button => {
+    button.disabled = r.records[Number(button.dataset.att)].date >= r.today;
+    button.onclick = () => edit(r.records[Number(button.dataset.att)]);
+  });
 }
 
 async function viewDF(note, month) {
