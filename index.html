@@ -2966,6 +2966,9 @@ function renderAttendanceMonth(sheet, records, today) {
   const byDate = new Map(records.map((record, index) => [record.date, { record, index }]));
   const paid = new Map();
   sheet.payments.forEach(p => paid.set(p.date, (paid.get(p.date) || 0) + p.amount));
+  const extraPaid = new Map();
+  (sheet.extraPayments || []).forEach(p => extraPaid.set(p.date, (extraPaid.get(p.date) || 0) + p.amount));
+  const extraTotal = [...extraPaid.values()].reduce((sum, amount) => sum + amount, 0);
   const weekdays = ['อา.', 'จ.', 'อ.', 'พ.', 'พฤ.', 'ศ.', 'ส.'];
   const rows = sheet.days.map(day => {
     const entry = byDate.get(day.date);
@@ -2979,7 +2982,8 @@ function renderAttendanceMonth(sheet, records, today) {
       <th scope="row">${label} ${Number(day.date.slice(-2))}</th>
       <td>${esc(a?.in || '–')}</td><td>${esc(a?.out || '–')}</td><td>${descriptions.map(esc).join(' · ')}</td>
       <td>${[
-        ...(day.earnings || []).map(item => '<div><b>' + baht(item.amount) + '</b> <span class="s">' + esc(item.label) + '</span></div>'),
+        ...(day.earnings?.length ? ['<div><b>' + baht(day.earnings.reduce((sum, item) => sum + item.amount, 0)) + '</b> <span class="s">จ่ายเพิ่มตามสรุป</span></div><div class="s">' + day.earnings.map(item => esc(item.label) + ' ' + baht(item.amount)).join(' · ') + '</div>'] : []),
+        ...(extraPaid.has(day.date) ? ['<div><b>' + baht(extraPaid.get(day.date)) + '</b> <span class="s">จ่ายเพิ่มแล้ว</span></div>'] : []),
         ...(paid.has(day.date) ? ['<div><b>' + baht(paid.get(day.date)) + '</b> <span class="s">เงินเดือนจ่ายแล้ว</span></div>'] : [])
       ].join('') || '–'}</td>
       <td>${day.date < today ? `<button class="btn ghost small" type="button" data-att="${entry?.index ?? ''}" data-att-date="${esc(day.date)}">${a ? 'แก้' : 'เติม'}</button>` : '–'}</td></tr>`;
@@ -2991,7 +2995,7 @@ function renderAttendanceMonth(sheet, records, today) {
     ${sheet.uniqueName ? '' : '<p class="s">ระบบจับคู่ชื่อกับยอดจ่ายไม่ได้อย่างชัดเจน กรุณาตรวจในหน้าเงินเดือน</p>'}
   </div><div class="card" style="overflow-x:auto">
     <style>.attendance-sheet{width:100%;border-collapse:collapse;font-size:13px}.attendance-sheet th,.attendance-sheet td{padding:6px 5px;text-align:left;border-bottom:1px solid var(--line)}.attendance-sheet th,.attendance-sheet td:nth-child(2),.attendance-sheet td:nth-child(3),.attendance-sheet td:nth-child(5){white-space:nowrap}.attendance-sheet button{padding:0 8px;white-space:nowrap}</style>
-    <table class="attendance-sheet" aria-label="ตารางเข้างานรายเดือน"><thead><tr><th>วัน</th><th>เข้า</th><th>ออก</th><th>สถานะ</th><th>จ่าย ฿</th><th>แก้ไข</th></tr></thead><tbody>${rows}</tbody><tfoot>${income ? `<tr><th colspan="4" scope="row">เบี้ยขยันรายเดือน</th><td><b>${baht(income.allowance)}</b></td><td></td></tr><tr><th colspan="4" scope="row">รวมโอที ค่าวันหยุด และเบี้ยขยัน</th><td><b>${baht(income.total)}</b></td><td></td></tr>` : ''}${sheet.payments.length ? `<tr><th colspan="4" scope="row">รวมเงินเดือนที่จ่ายแล้ว</th><td><b>${baht(sheet.payments.reduce((sum, p) => sum + p.amount, 0))}</b></td><td></td></tr>` : ''}</tfoot></table>
+    <table class="attendance-sheet" aria-label="ตารางเข้างานรายเดือน"><thead><tr><th>วัน</th><th>เข้า</th><th>ออก</th><th>สถานะ</th><th>จ่าย ฿</th><th>แก้ไข</th></tr></thead><tbody>${rows}</tbody><tfoot>${income ? `<tr><th colspan="4" scope="row">เบี้ยขยันรายเดือน</th><td><b>${baht(income.allowance)}</b></td><td></td></tr><tr><th colspan="4" scope="row">รวมโอที ค่าวันหยุด และเบี้ยขยัน</th><td><b>${baht(income.total)}</b></td><td></td></tr>` : ''}${sheet.payments.length ? `<tr><th colspan="4" scope="row">รวมเงินเดือนที่จ่ายแล้ว</th><td><b>${baht(sheet.payments.reduce((sum, p) => sum + p.amount, 0))}</b></td><td></td></tr>` : ''}${extraPaid.size ? `<tr><th colspan="4" scope="row">รวมจ่ายเพิ่มที่จ่ายแล้ว</th><td><b>${baht(extraTotal)}</b></td><td></td></tr>` : ''}</tfoot></table>
   </div>`;
 }
 async function viewOwnerAttendance(person = '', message = '', month = window._prMonth || todayISO().slice(0, 7)) {
