@@ -3379,8 +3379,8 @@ const snapMsg = r => ({ no_permission: 'ยังไม่ได้รับส�
 const SNAP_FORMS = {
   labin: {title: 'รับงานแล็บ', dn: true, slip: 'ใบรับงานแล็บ', work: 'ของที่รับมา', link: 'ใบรับแล็บ', needSlip: true, needWork: true},
   labout: {title: 'ส่งงานแล็บ', dn: true, slip: 'ใบส่งแล็บ', work: 'ของที่ส่งไป', link: 'ใบส่งแล็บ', needSlip: true, needWork: true},
-  buyin: {title: 'ซื้อของเข้าคลินิก', ref: 'ร้าน / เลขที่ใบส่งของ', slip: 'ใบส่งของ', work: 'ของที่รับเข้า', link: 'ใบส่งของ', needSlip: true, needWork: false},
-  sell: {title: 'ขายของคลินิก', ref: 'DN คนไข้ / ชื่อของที่ขาย', slip: 'สลิป / ใบเสร็จ', work: 'ของที่ขาย', link: 'สลิป', needSlip: false, needWork: true}
+  buyin: {title: 'ซื้อของเข้าคลินิก', ref: 'ร้าน / เลขที่ใบส่งของ', slip: 'ใบส่งของ', work: 'ของที่รับเข้า', link: 'ใบส่งของ', needSlip: true, needWork: true},
+  sell: {title: 'ขายของคลินิก', ref: 'DN คนไข้ / ชื่อของที่ขาย', slip: 'ใบเสร็จ / สลิป', work: 'ของที่ขาย', link: 'ใบเสร็จ', needSlip: true, needWork: true}
 };
 async function snapForm(type) {
   const L = SNAP_FORMS[type];
