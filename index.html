@@ -102,7 +102,7 @@ const fmtDate = v => { if (!v) return ''; const d = new Date(v); return isNaN(d)
 
 // ข้อมูลที่เปิดดูบ่อย: โชว์ของเดิมที่จำไว้ทันที แล้วดึงของใหม่ตามหลัง (ถ้าต่างและยังไม่ได้พิมพ์อะไร → วาดหน้าใหม่)
 const READ_ACTIONS = new Set(['stockTree', 'dailyToday', 'apptDay', 'checklist', 'buyHome', 'stock', 'caseList', 'labs', 'myTasks', 'today', 'myRequests', 'pending',
-  'teamList', 'payHome', 'payrollHome', 'slipInList', 'myCases', 'caseInfo', 'leaveHome', 'capHome', 'dfHome', 'reserved', 'myLabSteps', 'labPhotosHome', 'patients', 'tasksHome', 'patientInfo']);
+  'teamList', 'payHome', 'payrollHome', 'slipInList', 'myCases', 'caseInfo', 'leaveHome', 'capHome', 'dfHome', 'reserved', 'myLabSteps', 'labPhotosHome', 'patients', 'tasksHome', 'patientInfo', 'snapList']);
 const memGet = k => { try { return JSON.parse(localStorage.getItem('sma_c_' + k) || 'null'); } catch (e) { return null; } };
 const memSet = (k, v) => { const s = JSON.stringify(v); try { localStorage.setItem('sma_c_' + k, s); } catch (e) { memClear(); try { localStorage.setItem('sma_c_' + k, s); } catch (e2) {} } };
 const memClear = () => { try { Object.keys(localStorage).filter(k => k.startsWith('sma_c_')).forEach(k => localStorage.removeItem(k)); } catch (e) {} };
@@ -306,7 +306,7 @@ function route(refresh) {
   smaDock(page);
   const keepY = refresh ? window.scrollY : 0;   // v68 โหลดใหม่เบื้องหลัง = อยู่ตำแหน่งเดิม ไม่เด้งขึ้นบน
   if (!refresh) window.scrollTo(0,0);
-  const shown = ({newappt:viewSmaNewAppt, buyapproval:()=>viewSmaApproval('buy'), teamapproval:()=>viewSmaApproval('team'), labstock:viewSmaLabStock, labphotos:viewSmaLabPhotos, tasks: viewSmaHome, mytasks: viewTasks, more: viewSmaMore, labfit: viewSmaLabFits, recall: viewSmaRecall, stock: viewStock, team: viewTeam, cases: viewCases2, lab: viewLab, buy: viewBuy, daily: () => viewDaily2(), checklist: () => viewChecklist(), appt: () => viewAppt(), cap: () => { if (!refresh) capOpen = ''; return viewCapture(); }, pay: () => viewPay(), payroll: () => viewPayroll(), df: () => viewDF()}[page] || soon)(page);
+  const shown = ({labin:()=>snapLab('labin'), labout:()=>snapLab('labout'), buyin:()=>snapGoods('buyin'), sell:()=>snapGoods('sell'), newappt:viewSmaNewAppt, buyapproval:()=>viewSmaApproval('buy'), teamapproval:()=>viewSmaApproval('team'), labstock:viewSmaLabStock, labphotos:viewSmaLabPhotos, tasks: viewSmaHome, mytasks: viewTasks, more: viewSmaMore, labfit: viewSmaLabFits, recall: viewSmaRecall, stock: viewStock, team: viewTeam, cases: viewCases2, lab: viewLab, buy: viewBuy, daily: () => viewDaily2(), checklist: () => viewChecklist(), appt: () => viewAppt(), cap: () => { if (!refresh) capOpen = ''; return viewCapture(); }, pay: () => viewPay(), payroll: () => viewPayroll(), df: () => viewDF()}[page] || soon)(page);
   if (refresh && keepY) Promise.resolve(shown).then(() => window.scrollTo(0, keepY)).catch(() => {});
   if (page === 'appt' || page === 'cases') bgCalSync(page);
 }
@@ -3336,10 +3336,11 @@ function smaRecordUse(key) {
 }
 
 // v59: role shortcuts and explicit rich-menu destinations.
-function smaPermission(page) {return ({more:'',mytasks:'tasks',recall:'cases',labfit:'lab',labstock:'stock',labphotos:'lab',buyapproval:'buy',teamapproval:'team',newappt:'appt'})[page] ?? page;}
+function smaPermission(page) {return ({more:'',mytasks:'tasks',recall:'cases',labfit:'lab',labstock:'stock',labphotos:'lab',buyapproval:'buy',teamapproval:'team',newappt:'appt',labin:'lab',labout:'lab',buyin:'cap',sell:'cap'})[page] ?? page;}
 function smaRoleMenu() {
   if(me.role==='owner')return [['checklist','☑','งานค้างของหมอ'],['buyapproval','♧','อนุมัติซื้อของ'],['daily','▤','เงินรายวัน / รับเงิน'],['teamapproval','✓','อนุมัติ OT / วันลา'],['appt','▦','นัดหมาย'],['more','⊞','เพิ่มเติม']];
   if(smaIsLab())return [['lab','▧','งานแล็บ'],['labfit','▦','วันนัดใส่งาน'],['labstock','▥','วัสดุแล็บ'],['mytasks','☑','งานของฉัน'],['labphotos','◎','ถ่ายรูปงานแล็บ'],['more','⊞','เพิ่มเติม']];
+  if(smaIsAssistant()&&['ยุ้ย','หน่อย'].includes(String(me.nickname||'').trim()))return [['team','◷','แจ้งเข้า-ออกงาน'],['appt','▦','นัดหมายวันนี้'],['labin','▧','รับงานแล็บ'],['labout','▧','ส่งงานแล็บ'],['buyin','♧','ซื้อของเข้าคลินิก'],['sell','▤','ขายของคลินิก']];
   if(smaIsAssistant())return [['tasks','⌂','หน้าหลัก'],['checklist','☑','งานของฉัน'],['team','◷','ลงเวลา'],['stock','▥','สต็อก'],['cap','◎','ถ่ายรูป'],['more','⊞','เพิ่มเติม']];
   if(String(me.position||'').startsWith('ทันตแพทย์'))return [['appt','▦','นัดหมาย'],['df','∑','DF ของฉัน'],['daily','▤','สรุปรายวัน'],['more','⊞','เพิ่มเติม']];
   return [['tasks','⌂','หน้าหลัก'],[String(me.position||'').startsWith('ทันตแพทย์')?'appt':'newappt','▦',String(me.position||'').startsWith('ทันตแพทย์')?'นัดหมาย':'เพิ่มนัด'],['cases','♡','เคส'],['lab','▧','งานแล็บ'],['cap','◎','ถ่ายรูป'],['more','⊞','เพิ่มเติม']];
@@ -3370,12 +3371,102 @@ async function viewSmaLabPhotos(){
 }
 function smaOpenLabPhotos(id){smaPhotoLab=id;smaGo('labphotos');}
 
+// ===== ผู้ช่วย: ถ่ายส่ง (รับ/ส่งงานแล็บ · ของเข้า · ขายของ) =====
+const SNAP_PAY = ['เงินสด', 'โอน', 'บัตร'];
+const snapKey = () => 'SN_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 12);
+const snapMsg = r => ({ no_permission: 'ยังไม่ได้รับสิทธิ์เมนูนี้', need_photo: 'ถ่ายรูปก่อนกดส่ง', bad_photo: 'รูปใช้ไม่ได้ ลองถ่ายใหม่', lab_not_found: 'ไม่พบใบงานแล็บนี้', need_lab_photo: 'ถ่ายรูปใบส่งงานก่อน', unknown_action: 'ระบบหลังบ้านยังไม่ได้ติดตั้งส่วนนี้' }[r.error] || r.msg || ('ส่งไม่สำเร็จ: ' + r.error));
+const snapHead = (title, sub) => `<div id="m"></div><div class="sma-subhead"><div><h2>${title}</h2><div class="s">${sub}</div></div></div>`;
+const snapPicker = label => `<label class="btn" style="display:flex;align-items:center;justify-content:center;width:100%;color:#fff">📷 ${label}<input type="file" accept="image/*" capture="environment" class="snapCam" style="display:none"></label>
+  <label class="btn ghost small" style="display:flex;align-items:center;justify-content:center;width:100%;margin-top:6px">เลือกรูปจากอัลบั้ม<input type="file" accept="image/*" multiple class="snapAlbum" style="display:none"></label>
+  <div class="snapThumbs" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px"></div><div class="s snapCount">ยังไม่มีรูป</div>`;
+// ผูกช่องรูปใน box · คืนฟังก์ชันอ่านรายการรูปที่เลือกไว้
+function snapBindPhotos(box, max) {
+  const photos = [], thumbs = box.querySelector('.snapThumbs'), count = box.querySelector('.snapCount');
+  const draw = () => {
+    thumbs.innerHTML = photos.map((p, i) => `<button type="button" data-rm="${i}" aria-label="ลบรูปที่ ${i + 1}" style="position:relative;border:0;padding:0;background:none"><img src="${p}" alt="รูปที่ ${i + 1}" style="width:74px;height:74px;object-fit:cover;border-radius:8px;display:block"><span style="position:absolute;top:2px;right:2px;background:#000a;color:#fff;border-radius:10px;width:20px;height:20px;font-size:12px;line-height:20px">✕</span></button>`).join('');
+    count.textContent = photos.length ? photos.length + ' รูป (แตะรูปเพื่อลบ)' : 'ยังไม่มีรูป';
+    thumbs.querySelectorAll('[data-rm]').forEach(b => b.onclick = () => { photos.splice(+b.dataset.rm, 1); draw(); });
+  };
+  box.querySelectorAll('.snapCam,.snapAlbum').forEach(inp => inp.onchange = async () => {
+    for (const f of [...inp.files]) {
+      if (photos.length >= max) { flash('ส่งได้ครั้งละไม่เกิน ' + max + ' รูป'); break; }
+      try { photos.push(await shrinkImage(f)); dirty = true; draw(); } catch (e) { flash(e.message); }
+    }
+    inp.value = '';
+  });
+  return () => photos.slice();
+}
+
+async function snapLab(mode, note) {
+  const receiving = mode === 'labin', title = receiving ? 'รับงานแล็บ' : 'ส่งงานแล็บ';
+  app.innerHTML = '<div class="center">กำลังโหลดงานแล็บ…</div>';
+  const r = await call('labs'); if (!r.ok) return showError('โหลดงานแล็บไม่ได้: ' + r.error);
+  const list = r.labs.filter(l => l.kind === 'นอก' && ['ส่งแล้ว', 'ส่งแก้'].includes(l.status));
+  const name = l => [l.caseName, l.work, l.lab].filter(Boolean).join(' · ');
+  app.innerHTML = snapHead(title, receiving ? 'เลือกใบงาน ถ่ายใบส่งงานที่แล็บส่งมา แล้วกดรับ' : 'เลือกใบงาน ถ่ายใบส่งออกแล็บ แล้วกดส่ง') +
+    (list.length ? `<div class="card" id="snapBox"><label for="snapLabPick">ใบงานแล็บ</label>
+      <select id="snapLabPick"><option value="">เลือกใบงาน</option>${list.map(l => `<option value="${esc(l.id)}">${esc(name(l))}${l.due ? ' · นัดรับ ' + esc(fmtDate(l.due)) : ''}</option>`).join('')}</select>
+      <div style="margin-top:10px">${snapPicker(receiving ? 'ถ่ายใบรับงาน' : 'ถ่ายใบส่งงาน')}</div>
+      <button type="button" class="btn" id="snapGo" style="width:100%;margin-top:12px">${receiving ? 'รับงานแล้ว' : 'ส่งรูปเข้าใบงาน'}</button><div class="s" id="snapProg"></div></div>`
+      : `<div class="card s">${receiving ? 'ไม่มีงานแล็บนอกที่รอรับกลับ' : 'ยังไม่มีใบงานแล็บนอกที่ส่งอยู่'}</div>`) +
+    (receiving ? '' : '<button type="button" class="btn ghost" id="snapNewLab">+ ยังไม่มีใบงาน · เปิดใบงานส่งแล็บใหม่</button>');
+  if (note) flash(note, true);
+  const nw = document.getElementById('snapNewLab');
+  if (nw) nw.onclick = async () => { history.replaceState(null, '', location.pathname + '#lab'); smaDock('lab'); await viewLab(); const d = document.getElementById('newLab'); if (d) { d.open = true; d.scrollIntoView({block: 'start'}); } };
+  const box = document.getElementById('snapBox'); if (!box) return;
+  const getPhotos = snapBindPhotos(box, receiving ? 1 : 4), go = document.getElementById('snapGo'), pick = document.getElementById('snapLabPick'), prog = document.getElementById('snapProg');
+  const keys = new Map();   // รูปเดิมใช้กุญแจเดิม กดซ้ำหลังหลุดจะไม่เก็บซ้ำ
+  go.onclick = async () => {
+    const photos = getPhotos();
+    if (!pick.value) return flash('เลือกใบงานก่อน');
+    if (!photos.length) return flash('ถ่ายรูปก่อนกดส่ง');
+    const label = go.textContent; go.disabled = true; go.textContent = 'กำลังส่ง…';
+    const fail = res => { go.disabled = false; go.textContent = label; flash(snapMsg(res)); };
+    if (receiving) {
+      const res = await call('labReceive', {id: pick.value, fee: '', photo: photos[0]}); if (!res.ok) return fail(res);
+      dirty = false; return snapLab(mode, 'รับงานกลับแล้ว' + (res.billed ? ' · ใบส่งงานเข้าเจ้าหนี้แล้ว (รอวางบิล)' : res.waitFee ? ' · ยังอ่านค่าแล็บไม่ได้ หมอจะใส่ให้' : ''));
+    }
+    for (let i = 0; i < photos.length; i++) {
+      prog.textContent = `กำลังเก็บรูป ${i + 1}/${photos.length}`;
+      if (!keys.has(photos[i])) keys.set(photos[i], snapKey());
+      const res = await call('labPhotoAttach', {id: pick.value, photo: photos[i], requestKey: keys.get(photos[i])}); if (!res.ok) return fail(res);
+    }
+    dirty = false; snapLab(mode, 'เก็บรูปเข้าใบงานแล้ว ' + photos.length + ' รูป');
+  };
+}
+
+async function snapGoods(type, note) {
+  const buy = type === 'buyin', title = buy ? 'ซื้อของเข้าคลินิก' : 'ขายของคลินิก';
+  app.innerHTML = snapHead(title, buy ? 'ถ่ายของที่มาส่ง และใบรับของ' : 'ถ่ายของที่ขาย และสลิปถ้าโอน') +
+    `<div class="card" id="snapBox">${snapPicker(buy ? 'ถ่ายของ / ใบรับของ' : 'ถ่ายของ / สลิป')}
+      <label for="snapItems">${buy ? 'ของอะไร จำนวนเท่าไหร่' : 'ขายอะไร กี่ชิ้น'}</label><input id="snapItems" placeholder="${buy ? 'เช่น ถุงมือ M 10 กล่อง' : 'เช่น แปรงสีฟัน 2 อัน'}">
+      ${buy ? '' : `<label for="snapAmt">ยอดเงิน (บาท)</label><input id="snapAmt" type="number" inputmode="decimal" min="0"><label for="snapPay">จ่ายด้วย</label><select id="snapPay"><option value="">เลือก</option>${SNAP_PAY.map(p => `<option>${p}</option>`).join('')}</select>`}
+      <button type="button" class="btn" id="snapGo" style="width:100%;margin-top:12px">ส่ง</button></div><div id="snapList"></div>`;
+  if (note) flash(note, true);
+  const getPhotos = snapBindPhotos(document.getElementById('snapBox'), 6), go = document.getElementById('snapGo');
+  let key = snapKey();
+  go.onclick = async () => {
+    const photos = getPhotos(), val = id => (document.getElementById(id)?.value || '').trim();
+    if (!photos.length) return flash('ถ่ายรูปก่อนกดส่ง');
+    if (!val('snapItems')) return flash(buy ? 'พิมพ์ว่าของอะไร จำนวนเท่าไหร่' : 'พิมพ์ว่าขายอะไร กี่ชิ้น');
+    if (!buy && (!(+val('snapAmt') > 0) || !val('snapPay'))) return flash('ใส่ยอดเงินและวิธีจ่าย');
+    go.disabled = true; go.textContent = 'กำลังส่ง…';
+    const res = await call('snapSave', {type, photos, items: val('snapItems'), amount: val('snapAmt'), pay: val('snapPay'), requestKey: key});
+    if (!res.ok) { go.disabled = false; go.textContent = 'ส่ง'; return flash(snapMsg(res)); }
+    dirty = false; snapGoods(type, 'บันทึกแล้ว · รอตรวจ');
+  };
+  const box = document.getElementById('snapList');
+  const r = await call('snapList', {type}); if (!box.isConnected || !r.ok) return;
+  box.innerHTML = r.list.length ? `<div class="t">${r.all ? 'รายการล่าสุด' : 'ที่ฉันส่งล่าสุด'}</div><div class="list">${r.list.map(x => `<div class="row"><div class="grow"><div class="t">${esc(x.items)}${x.amount ? ' · ' + baht(x.amount) + ' บาท' : ''}</div><div class="s">${esc(x.at)} · ${esc(x.by)}${x.pay ? ' · ' + esc(x.pay) : ''} · ${r.all ? x.urls.map((u, i) => `<a href="${esc(u)}" target="_blank" rel="noopener">รูป ${i + 1}</a>`).join(' ') : x.urls.length + ' รูป'} · ${esc(x.status)}</div></div>${r.owner && x.status === 'รอตรวจ' ? `<button type="button" class="btn small" data-snapdone="${esc(x.id)}">ตรวจแล้ว</button>` : ''}</div>`).join('')}</div>` : '';
+  box.querySelectorAll('[data-snapdone]').forEach(b => b.onclick = async () => { b.disabled = true; const res = await call('snapDone', {id: b.dataset.snapdone}); if (!res.ok) { b.disabled = false; return flash(snapMsg(res)); } snapGoods(type, 'ทำเครื่องหมายตรวจแล้ว'); });
+}
+
 // v60 visual match: inline vector icons and grouped menus from approved app mockup.
 function smaSvg(name){
  const paths={house:'<path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1z"/>',calendar:'<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 11h18M8 15h.01M12 15h.01M16 15h.01M8 18h.01M12 18h.01"/>',folder:'<path d="M3 7V5a2 2 0 0 1 2-2h5l2 3h7a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M12 17s-5-3-3-5a2 2 0 0 1 3 0 2 2 0 0 1 3 0c2 2-3 5-3 5z"/>',flask:'<path d="M9 3h6M10 3v7L4 19a1.4 1.4 0 0 0 1 2h14a1.4 1.4 0 0 0 1-2l-6-9V3M7 16h10M10 18h.01M14 19h.01"/>',camera:'<path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3z"/><circle cx="12" cy="13" r="4"/>',package:'<path d="m12 3 9 5-9 5-9-5zM3 8v10l9 5 9-5V8M12 13v10M7.5 5.5l9 5"/>',bag:'<path d="M4 7h16l1 14H3zM8 8V6a4 4 0 0 1 8 0v2"/>',chart:'<path d="M3 3v18h18M7 16v-3M12 16V8M17 16V5"/>',users:'<circle cx="9" cy="8" r="3"/><path d="M3 21v-2a6 6 0 0 1 12 0v2M16 5a3 3 0 0 1 0 6M21 21v-2a6 6 0 0 0-4-5"/>',receipt:'<path d="M5 3 7 4l2-1 3 1 3-1 2 1 2-1v18l-2-1-2 1-3-1-3 1-2-1-2 1zM9 8h6M9 12h6M9 16h4"/>',wallet:'<path d="M20 8V5a2 2 0 0 0-2-2L5 6a2 2 0 0 0 0 4h16v11H5a2 2 0 0 1-2-2V8M21 14h-5v4h5"/>',calc:'<rect x="5" y="2" width="14" height="20" rx="2"/><path d="M8 6h8M8 10h1M15 10h1M8 14h1M15 14h1M8 18h1M15 18h1"/>',list:'<path d="m3 6 1.5 1.5L7 4M10 6h11M3 12l1.5 1.5L7 10M10 12h11M3 18l1.5 1.5L7 16M10 18h11"/>',clock:'<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',grid:'<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>',flower:'<path d="M12 7c-4-8-10-2-5 3-9 0-7 8 0 7-4 7 4 10 5 3 4 7 10 1 5-3 9 0 7-8 0-7 5-5-1-11-5-3z"/><circle cx="12" cy="13" r="2.5"/>',check:'<path d="m5 12 4 4L19 6"/>'};
  return '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'+(paths[name]||paths.grid)+'</svg>';
 }
-function smaIconFor(p){return smaSvg(({tasks:'house',checklist:'list',mytasks:'list',appt:'calendar',newappt:'calendar',cases:'folder',lab:'flask',labfit:'calendar',cap:'camera',labphotos:'camera',stock:'package',labstock:'package',buy:'bag',buyapproval:'bag',daily:'chart',team:'users',teamapproval:'check',df:'calc',pay:'receipt',payroll:'wallet',recall:'clock',more:'grid'})[p]||'grid');}
+function smaIconFor(p){return smaSvg(({tasks:'house',checklist:'list',mytasks:'list',appt:'calendar',newappt:'calendar',cases:'folder',lab:'flask',labfit:'calendar',cap:'camera',labphotos:'camera',stock:'package',labstock:'package',buy:'bag',buyapproval:'bag',daily:'chart',team:'users',teamapproval:'check',df:'calc',pay:'receipt',payroll:'wallet',recall:'clock',labin:'flask',labout:'flask',buyin:'bag',sell:'receipt',more:'grid'})[p]||'grid');}
 function smaBrand(){const h=document.querySelector('header'),title=document.getElementById('title');if(!h||h.dataset.smaBrand)return;h.dataset.smaBrand='1';h.insertAdjacentHTML('afterbegin','<span class="sma-brand-logo">'+smaSvg('flower')+'</span>');title.innerHTML='<span>SMILE ART</span><small>a little care, every day</small>';h.insertAdjacentHTML('beforeend','<span class="sma-avatar" aria-hidden="true">'+esc(me.role==='owner'?'DD':smaIsLab()?'LB':smaIsAssistant()?'AS':'AD')+'</span>');}
 function viewSmaMore(){
  const tile=(p,label,tone)=>'<button type="button" data-sma-page="'+p+'"><span class="sma-symbol '+tone+'">'+smaIconFor(p)+'</span><span>'+label+'</span></button>';
