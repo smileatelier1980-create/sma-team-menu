@@ -3379,9 +3379,62 @@ const SNAP_PAGES = {
   sell: ['ขายของคลินิก', 'ถ่ายของที่ขาย และสลิป']
 };
 const snapKey = () => 'SN_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 12);
-const snapMsg = r => ({ no_permission: 'ยังไม่ได้รับสิทธิ์เมนูนี้', need_photo: 'ยังไม่มีรูป', bad_photo: 'รูปใช้ไม่ได้ ลองถ่ายใหม่', too_many_photos: 'ส่งได้ครั้งละไม่เกิน 6 รูป', unknown_action: 'ระบบหลังบ้านยังไม่ได้ติดตั้งส่วนนี้' }[r.error] || r.msg || ('ส่งไม่สำเร็จ: ' + r.error));
+const snapMsg = r => ({ no_permission: 'ยังไม่ได้รับสิทธิ์เมนูนี้', need_photo: 'ยังไม่มีรูป', bad_photo: 'รูปใช้ไม่ได้ ลองถ่ายใหม่', too_many_photos: 'ส่งได้ครั้งละไม่เกิน 6 รูป', need_dn: 'ใส่ DN คนไข้ก่อน', need_two_photos: 'ต้องมีรูปใบส่งแล็บและของที่ส่งไป', unknown_action: 'ระบบหลังบ้านยังไม่ได้ติดตั้งส่วนนี้' }[r.error] || r.msg || ('ส่งไม่สำเร็จ: ' + r.error));
+
+// ส่งงานแล็บ: DN คนไข้ + กรอบรูปใบส่งแล็บ + กรอบรูปของที่ส่งไป → กดส่งครั้งเดียว
+async function snapLabOut() {
+  const frame = (id, title, hint, multi) => `<div class="t" style="margin-top:14px">${title}</div>
+    <label style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:92px;margin:6px 0 0;border:2px dashed var(--accent);border-radius:12px;color:var(--deep);cursor:pointer"><span style="font-size:17px;font-weight:600">📷 ${hint}</span><input type="file" accept="image/*" ${multi ? 'multiple' : ''} id="${id}" style="display:none"></label>
+    <div id="${id}Thumbs" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px"></div>`;
+  app.innerHTML = `<div id="m"></div><div class="sma-subhead"><div><h2>ส่งงานแล็บ</h2><div class="s">ใส่ DN ถ่ายใบส่งแล็บ และของที่ส่งไป แล้วกดส่ง</div></div></div>
+    <div class="card" id="snapBox"><label for="snapDn" style="margin-top:0">DN คนไข้</label><input id="snapDn" inputmode="numeric" autocomplete="off" maxlength="20" placeholder="เช่น 690176" style="height:52px;font-size:20px">
+    ${frame('snapSlip', '1. ใบส่งแล็บ', 'ถ่ายใบส่งแล็บ', false)}
+    ${frame('snapWork', '2. ของที่ส่งไป', 'ถ่ายของที่ส่งไป (ได้ถึง 5 รูป)', true)}
+    <button type="button" class="btn" id="snapGo" style="width:100%;margin-top:16px">ส่ง</button><div class="s" id="snapProg" role="status"></div></div><div id="snapList"></div>`;
+  const box = document.getElementById('snapBox'), dn = document.getElementById('snapDn'), go = document.getElementById('snapGo'), prog = document.getElementById('snapProg');
+  const sets = {snapSlip: {photos: [], max: 1}, snapWork: {photos: [], max: 5}};
+  let key = snapKey(), busy = 0;   // กุญแจเดิมใช้ตอนกดส่งซ้ำ · แก้ข้อมูลแล้วเปลี่ยนกุญแจ
+  const draw = id => {
+    const el = document.getElementById(id + 'Thumbs');
+    el.innerHTML = sets[id].photos.map((p, i) => `<button type="button" data-rm="${i}" aria-label="ลบรูปที่ ${i + 1}" style="position:relative;border:0;padding:0;background:none"><img src="${p}" alt="รูปที่ ${i + 1}" style="width:86px;height:86px;object-fit:cover;border-radius:8px;display:block"><span style="position:absolute;top:3px;right:3px;background:#000a;color:#fff;border-radius:11px;width:22px;height:22px;font-size:12px;line-height:22px">✕</span></button>`).join('');
+    el.querySelectorAll('[data-rm]').forEach(b => b.onclick = () => { if (go.disabled) return; sets[id].photos.splice(+b.dataset.rm, 1); key = snapKey(); draw(id); });
+  };
+  Object.keys(sets).forEach(id => { const inp = document.getElementById(id); inp.onchange = async () => {
+    const files = [...inp.files], set = sets[id]; if (!files.length) return;
+    busy++; go.disabled = true; prog.textContent = 'กำลังเตรียมรูป…';
+    if (set.max === 1) set.photos.length = 0;
+    for (const f of files) {
+      if (set.photos.length >= set.max) { flash('กรอบนี้ใส่ได้ไม่เกิน ' + set.max + ' รูป'); break; }
+      try { set.photos.push(await shrinkImage(f)); } catch (e) { flash(e.message); }
+    }
+    inp.value = ''; key = snapKey(); dirty = true; draw(id);
+    if (!--busy) { go.disabled = false; prog.textContent = ''; }
+  }; });
+  dn.oninput = () => { key = snapKey(); };
+  go.onclick = async () => {
+    const num = dn.value.trim(), slip = sets.snapSlip.photos, work = sets.snapWork.photos;
+    if (!/^[A-Za-z0-9-]{3,20}$/.test(num)) return flash('ใส่ DN คนไข้ก่อน');
+    if (!slip.length) return flash('ถ่ายใบส่งแล็บก่อน');
+    if (!work.length) return flash('ถ่ายของที่ส่งไปก่อน');
+    const inputs = [...box.querySelectorAll('input')];
+    go.disabled = true; inputs.forEach(i => i.disabled = true); prog.textContent = 'กำลังส่ง… อย่าเพิ่งปิดหน้านี้';
+    const res = await call('snapSave', {type: 'labout', dn: num, photos: [...slip, ...work], requestKey: key});
+    if (!res.ok) { go.disabled = false; inputs.forEach(i => i.disabled = false); prog.textContent = 'ยังส่งไม่สำเร็จ กดส่งอีกครั้งได้'; return flash(snapMsg(res)); }
+    dirty = false; await snapLabOut(); flash('ส่งงานแล็บ DN ' + num + ' แล้ว ✓', true);
+  };
+  await snapLoad('labout');
+}
+
+async function snapLoad(type) {
+  const out = document.getElementById('snapList');
+  const r = await call('snapList', {type}); if (!out || !out.isConnected || !r.ok) return;
+  const link = (u, i) => `<a href="${esc(u)}" target="_blank" rel="noopener">${type === 'labout' ? (i ? 'ของ ' + i : 'ใบส่งแล็บ') : 'รูป ' + (i + 1)}</a>`;
+  out.innerHTML = r.list.length ? `<div class="t">${r.all ? 'รายการล่าสุด' : 'ที่ฉันส่งล่าสุด'}</div><div class="list">${r.list.map(x => `<div class="row"><div class="grow"><div class="t">${x.items ? esc(x.items) + ' · ' : ''}${esc(x.at)}</div><div class="s">${esc(x.by)} · ${r.all ? x.urls.map(link).join(' · ') : x.urls.length + ' รูป'} · ${esc(x.status)}</div></div>${r.owner && x.status === 'รอตรวจ' ? `<button type="button" class="btn small" data-snapdone="${esc(x.id)}">ตรวจแล้ว</button>` : ''}</div>`).join('')}</div>` : '';
+  out.querySelectorAll('[data-snapdone]').forEach(b => b.onclick = async () => { b.disabled = true; const res = await call('snapDone', {id: b.dataset.snapdone}); if (!res.ok) { b.disabled = false; return flash(snapMsg(res)); } snapLoad(type); });
+}
 
 async function snapSend(type) {
+  if (type === 'labout') return snapLabOut();
   const [title, sub] = SNAP_PAGES[type];
   app.innerHTML = `<div id="m"></div><div class="sma-subhead"><div><h2>${title}</h2><div class="s">${sub} · ถ่ายแล้วส่งเข้าระบบเลย</div></div></div>
     <div class="card" id="snapBox"><label class="btn" style="display:flex;align-items:center;justify-content:center;width:100%;min-height:96px;font-size:19px;color:#fff;margin:0">📷 ถ่ายรูป<input type="file" accept="image/*" capture="environment" class="snapCam" style="display:none"></label>
@@ -3397,7 +3450,7 @@ async function snapSend(type) {
     lock(false);
     if (!res.ok) { prog.textContent = 'ยังส่งไม่สำเร็จ'; retry.hidden = false; return flash(snapMsg(res)); }
     const n = job.photos.length; job = null; dirty = false; prog.textContent = '';
-    flash('ส่งแล้ว ' + n + ' รูป ✓', true); load();
+    flash('ส่งแล้ว ' + n + ' รูป ✓', true); snapLoad(type);
   };
   retry.onclick = () => { if (job && !busy) send(); };
   inputs.forEach(inp => inp.onchange = async () => {
@@ -3409,13 +3462,7 @@ async function snapSend(type) {
     catch (e) { lock(false); prog.textContent = ''; inp.value = ''; return flash(e.message); }
     inp.value = ''; job = {photos, key: snapKey()}; send();
   });
-  const load = async () => {
-    const out = document.getElementById('snapList');
-    const r = await call('snapList', {type}); if (!out.isConnected || !r.ok) return;
-    out.innerHTML = r.list.length ? `<div class="t">${r.all ? 'รายการล่าสุด' : 'ที่ฉันส่งล่าสุด'}</div><div class="list">${r.list.map(x => `<div class="row"><div class="grow"><div class="t">${esc(x.at)}${x.items ? ' · ' + esc(x.items) : ''}</div><div class="s">${esc(x.by)} · ${r.all ? x.urls.map((u, i) => `<a href="${esc(u)}" target="_blank" rel="noopener">รูป ${i + 1}</a>`).join(' ') : x.urls.length + ' รูป'} · ${esc(x.status)}</div></div>${r.owner && x.status === 'รอตรวจ' ? `<button type="button" class="btn small" data-snapdone="${esc(x.id)}">ตรวจแล้ว</button>` : ''}</div>`).join('')}</div>` : '';
-    out.querySelectorAll('[data-snapdone]').forEach(b => b.onclick = async () => { b.disabled = true; const res = await call('snapDone', {id: b.dataset.snapdone}); if (!res.ok) { b.disabled = false; return flash(snapMsg(res)); } load(); });
-  };
-  await load();
+  await snapLoad(type);
 }
 
 // v60 visual match: inline vector icons and grouped menus from approved app mockup.
