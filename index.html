@@ -306,7 +306,7 @@ function route(refresh) {
   smaDock(page);
   const keepY = refresh ? window.scrollY : 0;   // v68 โหลดใหม่เบื้องหลัง = อยู่ตำแหน่งเดิม ไม่เด้งขึ้นบน
   if (!refresh) window.scrollTo(0,0);
-  const shown = ({labin:()=>snapLab('labin'), labout:()=>snapLab('labout'), buyin:()=>snapGoods('buyin'), sell:()=>snapGoods('sell'), newappt:viewSmaNewAppt, buyapproval:()=>viewSmaApproval('buy'), teamapproval:()=>viewSmaApproval('team'), labstock:viewSmaLabStock, labphotos:viewSmaLabPhotos, tasks: viewSmaHome, mytasks: viewTasks, more: viewSmaMore, labfit: viewSmaLabFits, recall: viewSmaRecall, stock: viewStock, team: viewTeam, cases: viewCases2, lab: viewLab, buy: viewBuy, daily: () => viewDaily2(), checklist: () => viewChecklist(), appt: () => viewAppt(), cap: () => { if (!refresh) capOpen = ''; return viewCapture(); }, pay: () => viewPay(), payroll: () => viewPayroll(), df: () => viewDF()}[page] || soon)(page);
+  const shown = ({labin:()=>snapSend('labin'), labout:()=>snapSend('labout'), buyin:()=>snapSend('buyin'), sell:()=>snapSend('sell'), newappt:viewSmaNewAppt, buyapproval:()=>viewSmaApproval('buy'), teamapproval:()=>viewSmaApproval('team'), labstock:viewSmaLabStock, labphotos:viewSmaLabPhotos, tasks: viewSmaHome, mytasks: viewTasks, more: viewSmaMore, labfit: viewSmaLabFits, recall: viewSmaRecall, stock: viewStock, team: viewTeam, cases: viewCases2, lab: viewLab, buy: viewBuy, daily: () => viewDaily2(), checklist: () => viewChecklist(), appt: () => viewAppt(), cap: () => { if (!refresh) capOpen = ''; return viewCapture(); }, pay: () => viewPay(), payroll: () => viewPayroll(), df: () => viewDF()}[page] || soon)(page);
   if (refresh && keepY) Promise.resolve(shown).then(() => window.scrollTo(0, keepY)).catch(() => {});
   if (page === 'appt' || page === 'cases') bgCalSync(page);
 }
@@ -3371,94 +3371,51 @@ async function viewSmaLabPhotos(){
 }
 function smaOpenLabPhotos(id){smaPhotoLab=id;smaGo('labphotos');}
 
-// ===== ผู้ช่วย: ถ่ายส่ง (รับ/ส่งงานแล็บ · ของเข้า · ขายของ) =====
-const SNAP_PAY = ['เงินสด', 'โอน', 'บัตร'];
+// ===== ผู้ช่วย: ถ่ายรูปแล้วส่งเข้าระบบเลย (รับ/ส่งงานแล็บ · ของเข้า · ขายของ) =====
+const SNAP_PAGES = {
+  labin: ['รับงานแล็บ', 'ถ่ายใบรับงาน / งานที่แล็บส่งมา'],
+  labout: ['ส่งงานแล็บ', 'ถ่ายใบส่งงาน / งานที่ส่งออก'],
+  buyin: ['ซื้อของเข้าคลินิก', 'ถ่ายของ และใบรับของ'],
+  sell: ['ขายของคลินิก', 'ถ่ายของที่ขาย และสลิป']
+};
 const snapKey = () => 'SN_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 12);
-const snapMsg = r => ({ no_permission: 'ยังไม่ได้รับสิทธิ์เมนูนี้', need_photo: 'ถ่ายรูปก่อนกดส่ง', bad_photo: 'รูปใช้ไม่ได้ ลองถ่ายใหม่', lab_not_found: 'ไม่พบใบงานแล็บนี้', need_lab_photo: 'ถ่ายรูปใบส่งงานก่อน', unknown_action: 'ระบบหลังบ้านยังไม่ได้ติดตั้งส่วนนี้' }[r.error] || r.msg || ('ส่งไม่สำเร็จ: ' + r.error));
-const snapHead = (title, sub) => `<div id="m"></div><div class="sma-subhead"><div><h2>${title}</h2><div class="s">${sub}</div></div></div>`;
-const snapPicker = label => `<label class="btn" style="display:flex;align-items:center;justify-content:center;width:100%;color:#fff">📷 ${label}<input type="file" accept="image/*" capture="environment" class="snapCam" style="display:none"></label>
-  <label class="btn ghost small" style="display:flex;align-items:center;justify-content:center;width:100%;margin-top:6px">เลือกรูปจากอัลบั้ม<input type="file" accept="image/*" multiple class="snapAlbum" style="display:none"></label>
-  <div class="snapThumbs" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px"></div><div class="s snapCount">ยังไม่มีรูป</div>`;
-// ผูกช่องรูปใน box · คืนฟังก์ชันอ่านรายการรูปที่เลือกไว้
-function snapBindPhotos(box, max) {
-  const photos = [], thumbs = box.querySelector('.snapThumbs'), count = box.querySelector('.snapCount');
-  const draw = () => {
-    thumbs.innerHTML = photos.map((p, i) => `<button type="button" data-rm="${i}" aria-label="ลบรูปที่ ${i + 1}" style="position:relative;border:0;padding:0;background:none"><img src="${p}" alt="รูปที่ ${i + 1}" style="width:74px;height:74px;object-fit:cover;border-radius:8px;display:block"><span style="position:absolute;top:2px;right:2px;background:#000a;color:#fff;border-radius:10px;width:20px;height:20px;font-size:12px;line-height:20px">✕</span></button>`).join('');
-    count.textContent = photos.length ? photos.length + ' รูป (แตะรูปเพื่อลบ)' : 'ยังไม่มีรูป';
-    thumbs.querySelectorAll('[data-rm]').forEach(b => b.onclick = () => { photos.splice(+b.dataset.rm, 1); draw(); });
+const snapMsg = r => ({ no_permission: 'ยังไม่ได้รับสิทธิ์เมนูนี้', need_photo: 'ยังไม่มีรูป', bad_photo: 'รูปใช้ไม่ได้ ลองถ่ายใหม่', too_many_photos: 'ส่งได้ครั้งละไม่เกิน 6 รูป', unknown_action: 'ระบบหลังบ้านยังไม่ได้ติดตั้งส่วนนี้' }[r.error] || r.msg || ('ส่งไม่สำเร็จ: ' + r.error));
+
+async function snapSend(type) {
+  const [title, sub] = SNAP_PAGES[type];
+  app.innerHTML = `<div id="m"></div><div class="sma-subhead"><div><h2>${title}</h2><div class="s">${sub} · ถ่ายแล้วส่งเข้าระบบเลย</div></div></div>
+    <div class="card" id="snapBox"><label class="btn" style="display:flex;align-items:center;justify-content:center;width:100%;min-height:96px;font-size:19px;color:#fff;margin:0">📷 ถ่ายรูป<input type="file" accept="image/*" capture="environment" class="snapCam" style="display:none"></label>
+    <label class="btn ghost small" style="display:flex;align-items:center;justify-content:center;width:100%;margin-top:8px">เลือกรูปจากอัลบั้ม (ได้ถึง 6 รูป)<input type="file" accept="image/*" multiple class="snapAlbum" style="display:none"></label>
+    <div class="s" id="snapProg" role="status"></div><button type="button" class="btn" id="snapRetry" style="width:100%;margin-top:8px" hidden>ส่งอีกครั้ง</button></div><div id="snapList"></div>`;
+  const box = document.getElementById('snapBox'), prog = document.getElementById('snapProg'), retry = document.getElementById('snapRetry');
+  const inputs = [...box.querySelectorAll('input')];
+  let job = null, busy = false;   // ส่งไม่สำเร็จ = เก็บรูปกับกุญแจเดิมไว้กดส่งซ้ำ ไม่เกิดรายการซ้ำ
+  const lock = on => { busy = on; inputs.forEach(i => i.disabled = on); box.querySelectorAll('label').forEach(l => l.style.opacity = on ? '.5' : ''); };
+  const send = async () => {
+    lock(true); retry.hidden = true; dirty = true; prog.textContent = 'กำลังส่ง ' + job.photos.length + ' รูป… อย่าเพิ่งปิดหน้านี้';
+    const res = await call('snapSave', {type, photos: job.photos, requestKey: job.key});
+    lock(false);
+    if (!res.ok) { prog.textContent = 'ยังส่งไม่สำเร็จ'; retry.hidden = false; return flash(snapMsg(res)); }
+    const n = job.photos.length; job = null; dirty = false; prog.textContent = '';
+    flash('ส่งแล้ว ' + n + ' รูป ✓', true); load();
   };
-  box.querySelectorAll('.snapCam,.snapAlbum').forEach(inp => inp.onchange = async () => {
-    for (const f of [...inp.files]) {
-      if (photos.length >= max) { flash('ส่งได้ครั้งละไม่เกิน ' + max + ' รูป'); break; }
-      try { photos.push(await shrinkImage(f)); dirty = true; draw(); } catch (e) { flash(e.message); }
-    }
-    inp.value = '';
+  retry.onclick = () => { if (job && !busy) send(); };
+  inputs.forEach(inp => inp.onchange = async () => {
+    let files = [...inp.files]; if (!files.length || busy) return;
+    if (files.length > 6) { inp.value = ''; return flash('ส่งได้ครั้งละไม่เกิน 6 รูป'); }
+    lock(true); prog.textContent = 'กำลังเตรียมรูป…';
+    const photos = [];
+    try { for (const f of files) photos.push(await shrinkImage(f)); }
+    catch (e) { lock(false); prog.textContent = ''; inp.value = ''; return flash(e.message); }
+    inp.value = ''; job = {photos, key: snapKey()}; send();
   });
-  return () => photos.slice();
-}
-
-async function snapLab(mode, note) {
-  const receiving = mode === 'labin', title = receiving ? 'รับงานแล็บ' : 'ส่งงานแล็บ';
-  app.innerHTML = '<div class="center">กำลังโหลดงานแล็บ…</div>';
-  const r = await call('labs'); if (!r.ok) return showError('โหลดงานแล็บไม่ได้: ' + r.error);
-  const list = r.labs.filter(l => l.kind === 'นอก' && ['ส่งแล้ว', 'ส่งแก้'].includes(l.status));
-  const name = l => [l.caseName, l.work, l.lab].filter(Boolean).join(' · ');
-  app.innerHTML = snapHead(title, receiving ? 'เลือกใบงาน ถ่ายใบส่งงานที่แล็บส่งมา แล้วกดรับ' : 'เลือกใบงาน ถ่ายใบส่งออกแล็บ แล้วกดส่ง') +
-    (list.length ? `<div class="card" id="snapBox"><label for="snapLabPick">ใบงานแล็บ</label>
-      <select id="snapLabPick"><option value="">เลือกใบงาน</option>${list.map(l => `<option value="${esc(l.id)}">${esc(name(l))}${l.due ? ' · นัดรับ ' + esc(fmtDate(l.due)) : ''}</option>`).join('')}</select>
-      <div style="margin-top:10px">${snapPicker(receiving ? 'ถ่ายใบรับงาน' : 'ถ่ายใบส่งงาน')}</div>
-      <button type="button" class="btn" id="snapGo" style="width:100%;margin-top:12px">${receiving ? 'รับงานแล้ว' : 'ส่งรูปเข้าใบงาน'}</button><div class="s" id="snapProg"></div></div>`
-      : `<div class="card s">${receiving ? 'ไม่มีงานแล็บนอกที่รอรับกลับ' : 'ยังไม่มีใบงานแล็บนอกที่ส่งอยู่'}</div>`) +
-    (receiving ? '' : '<button type="button" class="btn ghost" id="snapNewLab">+ ยังไม่มีใบงาน · เปิดใบงานส่งแล็บใหม่</button>');
-  if (note) flash(note, true);
-  const nw = document.getElementById('snapNewLab');
-  if (nw) nw.onclick = async () => { history.replaceState(null, '', location.pathname + '#lab'); smaDock('lab'); await viewLab(); const d = document.getElementById('newLab'); if (d) { d.open = true; d.scrollIntoView({block: 'start'}); } };
-  const box = document.getElementById('snapBox'); if (!box) return;
-  const getPhotos = snapBindPhotos(box, receiving ? 1 : 4), go = document.getElementById('snapGo'), pick = document.getElementById('snapLabPick'), prog = document.getElementById('snapProg');
-  const keys = new Map();   // รูปเดิมใช้กุญแจเดิม กดซ้ำหลังหลุดจะไม่เก็บซ้ำ
-  go.onclick = async () => {
-    const photos = getPhotos();
-    if (!pick.value) return flash('เลือกใบงานก่อน');
-    if (!photos.length) return flash('ถ่ายรูปก่อนกดส่ง');
-    const label = go.textContent; go.disabled = true; go.textContent = 'กำลังส่ง…';
-    const fail = res => { go.disabled = false; go.textContent = label; flash(snapMsg(res)); };
-    if (receiving) {
-      const res = await call('labReceive', {id: pick.value, fee: '', photo: photos[0]}); if (!res.ok) return fail(res);
-      dirty = false; return snapLab(mode, 'รับงานกลับแล้ว' + (res.billed ? ' · ใบส่งงานเข้าเจ้าหนี้แล้ว (รอวางบิล)' : res.waitFee ? ' · ยังอ่านค่าแล็บไม่ได้ หมอจะใส่ให้' : ''));
-    }
-    for (let i = 0; i < photos.length; i++) {
-      prog.textContent = `กำลังเก็บรูป ${i + 1}/${photos.length}`;
-      if (!keys.has(photos[i])) keys.set(photos[i], snapKey());
-      const res = await call('labPhotoAttach', {id: pick.value, photo: photos[i], requestKey: keys.get(photos[i])}); if (!res.ok) return fail(res);
-    }
-    dirty = false; snapLab(mode, 'เก็บรูปเข้าใบงานแล้ว ' + photos.length + ' รูป');
+  const load = async () => {
+    const out = document.getElementById('snapList');
+    const r = await call('snapList', {type}); if (!out.isConnected || !r.ok) return;
+    out.innerHTML = r.list.length ? `<div class="t">${r.all ? 'รายการล่าสุด' : 'ที่ฉันส่งล่าสุด'}</div><div class="list">${r.list.map(x => `<div class="row"><div class="grow"><div class="t">${esc(x.at)}${x.items ? ' · ' + esc(x.items) : ''}</div><div class="s">${esc(x.by)} · ${r.all ? x.urls.map((u, i) => `<a href="${esc(u)}" target="_blank" rel="noopener">รูป ${i + 1}</a>`).join(' ') : x.urls.length + ' รูป'} · ${esc(x.status)}</div></div>${r.owner && x.status === 'รอตรวจ' ? `<button type="button" class="btn small" data-snapdone="${esc(x.id)}">ตรวจแล้ว</button>` : ''}</div>`).join('')}</div>` : '';
+    out.querySelectorAll('[data-snapdone]').forEach(b => b.onclick = async () => { b.disabled = true; const res = await call('snapDone', {id: b.dataset.snapdone}); if (!res.ok) { b.disabled = false; return flash(snapMsg(res)); } load(); });
   };
-}
-
-async function snapGoods(type, note) {
-  const buy = type === 'buyin', title = buy ? 'ซื้อของเข้าคลินิก' : 'ขายของคลินิก';
-  app.innerHTML = snapHead(title, buy ? 'ถ่ายของที่มาส่ง และใบรับของ' : 'ถ่ายของที่ขาย และสลิปถ้าโอน') +
-    `<div class="card" id="snapBox">${snapPicker(buy ? 'ถ่ายของ / ใบรับของ' : 'ถ่ายของ / สลิป')}
-      <label for="snapItems">${buy ? 'ของอะไร จำนวนเท่าไหร่' : 'ขายอะไร กี่ชิ้น'}</label><input id="snapItems" placeholder="${buy ? 'เช่น ถุงมือ M 10 กล่อง' : 'เช่น แปรงสีฟัน 2 อัน'}">
-      ${buy ? '' : `<label for="snapAmt">ยอดเงิน (บาท)</label><input id="snapAmt" type="number" inputmode="decimal" min="0"><label for="snapPay">จ่ายด้วย</label><select id="snapPay"><option value="">เลือก</option>${SNAP_PAY.map(p => `<option>${p}</option>`).join('')}</select>`}
-      <button type="button" class="btn" id="snapGo" style="width:100%;margin-top:12px">ส่ง</button></div><div id="snapList"></div>`;
-  if (note) flash(note, true);
-  const getPhotos = snapBindPhotos(document.getElementById('snapBox'), 6), go = document.getElementById('snapGo');
-  let key = snapKey();
-  go.onclick = async () => {
-    const photos = getPhotos(), val = id => (document.getElementById(id)?.value || '').trim();
-    if (!photos.length) return flash('ถ่ายรูปก่อนกดส่ง');
-    if (!val('snapItems')) return flash(buy ? 'พิมพ์ว่าของอะไร จำนวนเท่าไหร่' : 'พิมพ์ว่าขายอะไร กี่ชิ้น');
-    if (!buy && (!(+val('snapAmt') > 0) || !val('snapPay'))) return flash('ใส่ยอดเงินและวิธีจ่าย');
-    go.disabled = true; go.textContent = 'กำลังส่ง…';
-    const res = await call('snapSave', {type, photos, items: val('snapItems'), amount: val('snapAmt'), pay: val('snapPay'), requestKey: key});
-    if (!res.ok) { go.disabled = false; go.textContent = 'ส่ง'; return flash(snapMsg(res)); }
-    dirty = false; snapGoods(type, 'บันทึกแล้ว · รอตรวจ');
-  };
-  const box = document.getElementById('snapList');
-  const r = await call('snapList', {type}); if (!box.isConnected || !r.ok) return;
-  box.innerHTML = r.list.length ? `<div class="t">${r.all ? 'รายการล่าสุด' : 'ที่ฉันส่งล่าสุด'}</div><div class="list">${r.list.map(x => `<div class="row"><div class="grow"><div class="t">${esc(x.items)}${x.amount ? ' · ' + baht(x.amount) + ' บาท' : ''}</div><div class="s">${esc(x.at)} · ${esc(x.by)}${x.pay ? ' · ' + esc(x.pay) : ''} · ${r.all ? x.urls.map((u, i) => `<a href="${esc(u)}" target="_blank" rel="noopener">รูป ${i + 1}</a>`).join(' ') : x.urls.length + ' รูป'} · ${esc(x.status)}</div></div>${r.owner && x.status === 'รอตรวจ' ? `<button type="button" class="btn small" data-snapdone="${esc(x.id)}">ตรวจแล้ว</button>` : ''}</div>`).join('')}</div>` : '';
-  box.querySelectorAll('[data-snapdone]').forEach(b => b.onclick = async () => { b.disabled = true; const res = await call('snapDone', {id: b.dataset.snapdone}); if (!res.ok) { b.disabled = false; return flash(snapMsg(res)); } snapGoods(type, 'ทำเครื่องหมายตรวจแล้ว'); });
+  await load();
 }
 
 // v60 visual match: inline vector icons and grouped menus from approved app mockup.
